@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smartboard - Handwriting & Translator</title>
+    <title>Smartboard - Handwriting & Translation</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f4f6f9;
+            background-color: #eef2f5;
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -24,11 +24,21 @@
             gap: 15px;
             align-items: center;
             justify-content: center;
+            flex-wrap: wrap;
             z-index: 10;
         }
 
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 2px solid #ddd;
+            padding-right: 15px;
+        }
+        .toolbar-group:last-child { border-right: none; }
+
         select, button {
-            padding: 8px 12px;
+            padding: 8px 14px;
             font-size: 15px;
             border-radius: 6px;
             border: 1px solid #ccc;
@@ -36,174 +46,179 @@
             outline: none;
             background: #fff;
             transition: 0.2s;
+            font-weight: 500;
         }
 
         select:focus { border-color: #007bff; }
         
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            font-weight: bold;
-        }
+        button.action-btn { background-color: #007bff; color: white; border: none; }
+        button.action-btn:hover { background-color: #0056b3; }
         
-        button:hover { background-color: #0056b3; }
-        button.danger { background-color: #dc3545; }
-        button.danger:hover { background-color: #a71d2a; }
+        button.toggle-btn { background-color: #e2e8f0; color: #333; border: 1px solid #cbd5e1; }
+        button.toggle-btn.active { background-color: #10b981; color: white; border-color: #059669; }
+        
+        button.danger { background-color: #ef4444; color: white; border: none; }
+        button.danger:hover { background-color: #b91c1c; }
 
-        .status {
-            font-size: 14px;
-            color: #555;
-            margin-left: 10px;
-            font-weight: 500;
-        }
+        .status { font-size: 14px; color: #64748b; font-weight: 500; min-width: 150px; }
 
         .board-container {
             position: relative;
             flex-grow: 1;
             width: 100%;
             background-color: #ffffff;
-            touch-action: none; 
+            touch-action: none; /* Prevents scrolling while writing */
             overflow: hidden;
         }
 
-        /* 3 Layers: Text Layer (Bottom), Ink Layer (Middle), Draft Layer (Top) */
-        #textLayer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1;
-        }
         canvas {
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            cursor: crosshair;
-        }
-        #inkCanvas { z-index: 2; pointer-events: none; }
-        #draftCanvas { z-index: 3; }
-
-        /* Styling for the converted, selectable text */
-        .board-text {
-            position: absolute;
-            color: #000;
-            font-weight: 600;
-            cursor: pointer;
-            user-select: text;
-            padding: 2px 5px;
-            border: 2px solid transparent;
-            border-radius: 4px;
-            white-space: nowrap;
-            transition: background 0.2s, border 0.2s;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
         }
 
-        .board-text:hover {
-            border: 2px dashed #007bff;
-            background: rgba(0, 123, 255, 0.05);
-        }
+        #textCanvas { z-index: 1; }
+        #inkCanvas { z-index: 2; cursor: crosshair; }
 
-        /* Translator Popup UI */
-        #translatorPopup {
+        /* Translation Popup */
+        #translatePopup {
             position: absolute;
             display: none;
-            background: #fff;
-            border: 1px solid #ddd;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-            padding: 8px;
+            background: white;
+            padding: 10px;
             border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             z-index: 100;
+            border: 1px solid #ddd;
             display: flex;
-            align-items: center;
             gap: 8px;
-        }
-
-        #translatorPopup label {
-            font-size: 12px;
-            font-weight: bold;
-            color: #555;
+            align-items: center;
         }
     </style>
 </head>
 <body>
 
     <div class="toolbar">
-        <label for="lang" style="font-weight: bold; color: #333;">Writing Language:</label>
-        <select id="lang">
-            <option value="en">English</option>
-            <option value="mr">Marathi (मराठी)</option>
-            <option value="hi">Hindi (हिन्दी)</option>
-            <option value="gu">Gujarati (ગુજરાતી)</option>
-            <option value="bn">Bengali (বাংলা)</option>
-            <option value="ta">Tamil (தமிழ்)</option>
-            <option value="te">Telugu (తెలుగు)</option>
-            <option value="kn">Kannada (ಕನ್ನಡ)</option>
-        </select>
-        <button id="clearBtn" class="danger">Clear Board</button>
-        <div class="status" id="statusText">Ready. Write anywhere...</div>
-    </div>
+        <div class="toolbar-group">
+            <button id="modeWrite" class="toggle-btn active">✍️ Write Mode</button>
+            <button id="modeSelect" class="toggle-btn">👆 Select Mode</button>
+        </div>
+        
+        <div class="toolbar-group" id="writeControls">
+            <label for="writeLang" style="font-weight: bold; color: #333; font-size: 14px;">Input Lang:</label>
+            <select id="writeLang">
+                <option value="en">English</option>
+                <option value="mr">Marathi (मराठी)</option>
+                <option value="hi">Hindi (हिन्दी)</option>
+            </select>
+        </div>
 
-    <!-- Translator Popup -->
-    <div id="translatorPopup" style="display: none;">
-        <label>Translate to:</label>
-        <select id="translateLang">
-            <option value="">-- Select --</option>
-            <option value="en">English</option>
-            <option value="mr">Marathi</option>
-            <option value="hi">Hindi</option>
-            <option value="gu">Gujarati</option>
-            <option value="bn">Bengali</option>
-            <option value="ta">Tamil</option>
-            <option value="te">Telugu</option>
-            <option value="kn">Kannada</option>
-        </select>
+        <div class="toolbar-group">
+            <button id="clearBtn" class="danger">Clear Board</button>
+            <div class="status" id="statusText">Ready to write...</div>
+        </div>
     </div>
 
     <div class="board-container" id="board">
-        <!-- Layer 1: DOM Elements for selectable text -->
-        <div id="textLayer"></div>
-        <!-- Layer 2: Permanent ink for the current word -->
+        <canvas id="textCanvas"></canvas>
         <canvas id="inkCanvas"></canvas>
-        <!-- Layer 3: Temporary ink for the active pen stroke -->
-        <canvas id="draftCanvas"></canvas>
+        
+        <!-- Translate Popup UI -->
+        <div id="translatePopup" style="display: none;">
+            <select id="targetLang">
+                <option value="mr">To Marathi (मराठी)</option>
+                <option value="hi">To Hindi (हिन्दी)</option>
+                <option value="en">To English</option>
+            </select>
+            <button id="translateBtn" class="action-btn" style="padding: 6px 10px; font-size: 13px;">Translate</button>
+            <button id="closePopupBtn" style="padding: 6px 10px; font-size: 13px;">✕</button>
+        </div>
     </div>
 
     <script>
-        const draftCanvas = document.getElementById('draftCanvas');
         const inkCanvas = document.getElementById('inkCanvas');
-        const draftCtx = draftCanvas.getContext('2d');
-        const inkCtx = inkCanvas.getContext('2d');
-        const textLayer = document.getElementById('textLayer');
-        
+        const textCanvas = document.getElementById('textCanvas');
+        const inkCtx = inkCanvas.getContext('2d', { willReadFrequently: true });
+        const textCtx = textCanvas.getContext('2d');
         const board = document.getElementById('board');
         const statusText = document.getElementById('statusText');
-        const langSelect = document.getElementById('lang');
-        const translatorPopup = document.getElementById('translatorPopup');
-        const translateLang = document.getElementById('translateLang');
+        const writeLangSelect = document.getElementById('writeLang');
+        
+        const modeWriteBtn = document.getElementById('modeWrite');
+        const modeSelectBtn = document.getElementById('modeSelect');
+        const translatePopup = document.getElementById('translatePopup');
+        const targetLang = document.getElementById('targetLang');
+        const translateBtn = document.getElementById('translateBtn');
 
+        // Application State
+        let currentMode = 'write'; // 'write' or 'select'
+        let textObjects = []; // Stores recognized text blocks { text, x, y, w, h, fontSize }
+        let selectedTextIndex = -1;
+        
+        // Drawing State
         let isDrawing = false;
         let convertTimer = null;
-        let points = []; 
-        let activeTextElement = null; // Tracks which text is clicked for translation
-        
-        let currentStrokeX = [], currentStrokeY = [], currentStrokeTime = [];
+        let currentStrokeX = [];
+        let currentStrokeY = [];
+        let currentStrokeTime = [];
         let allStrokes = [];
         let strokeStartTime = 0;
         let bounds = null;
 
+        // Resize Canvas safely
         function resizeCanvases() {
             const rect = board.getBoundingClientRect();
-            draftCanvas.width = rect.width; draftCanvas.height = rect.height;
-            inkCanvas.width = rect.width;   inkCanvas.height = rect.height;
-            setupPen(draftCtx);
-            setupPen(inkCtx);
+            inkCanvas.width = rect.width;
+            inkCanvas.height = rect.height;
+            textCanvas.width = rect.width;
+            textCanvas.height = rect.height;
+            setupPen();
+            redrawTextCanvas();
         }
 
         window.addEventListener('resize', resizeCanvases);
         resizeCanvases();
 
-        function setupPen(ctx) {
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = '#000000';
+        function setupPen() {
+            inkCtx.lineWidth = 4;
+            inkCtx.lineCap = 'round';
+            inkCtx.lineJoin = 'round';
+            inkCtx.strokeStyle = '#1e293b';
+        }
+
+        // Mode Switching
+        modeWriteBtn.addEventListener('click', () => setMode('write'));
+        modeSelectBtn.addEventListener('click', () => setMode('select'));
+
+        function setMode(mode) {
+            currentMode = mode;
+            if (mode === 'write') {
+                modeWriteBtn.classList.add('active');
+                modeSelectBtn.classList.remove('active');
+                inkCanvas.style.cursor = 'crosshair';
+                hidePopup();
+                selectedTextIndex = -1;
+                redrawTextCanvas();
+                statusText.innerText = "Ready to write...";
+            } else {
+                modeSelectBtn.classList.add('active');
+                modeWriteBtn.classList.remove('active');
+                inkCanvas.style.cursor = 'pointer';
+                statusText.innerText = "Click on text to translate.";
+            }
+        }
+
+        function getCoordinates(e) {
+            const rect = inkCanvas.getBoundingClientRect();
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+            return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
         function updateBounds(x, y) {
@@ -217,211 +232,236 @@
             }
         }
 
-        function getCoordinates(e) {
-            const rect = draftCanvas.getBoundingClientRect();
-            let clientX = e.clientX, clientY = e.clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
-            }
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        }
-
-        function drawSmoothCurve() {
-            draftCtx.clearRect(0, 0, draftCanvas.width, draftCanvas.height);
-            if (points.length < 3) {
-                const b = points[0];
-                draftCtx.beginPath();
-                draftCtx.arc(b.x, b.y, draftCtx.lineWidth / 2, 0, Math.PI * 2, !0);
-                draftCtx.fill();
+        // Pointer Events (Handles both Write and Select modes)
+        inkCanvas.addEventListener('pointerdown', (e) => {
+            if (currentMode === 'select') {
+                handleSelection(e);
                 return;
             }
-            draftCtx.beginPath();
-            draftCtx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length - 2; i++) {
-                const c = (points[i].x + points[i + 1].x) / 2;
-                const d = (points[i].y + points[i + 1].y) / 2;
-                draftCtx.quadraticCurveTo(points[i].x, points[i].y, c, d);
-            }
-            draftCtx.quadraticCurveTo(
-                points[points.length - 2].x, points[points.length - 2].y,
-                points[points.length - 1].x, points[points.length - 1].y
-            );
-            draftCtx.stroke();
-        }
-
-        function startDrawing(e) {
-            // Hide popup if writing starts
-            translatorPopup.style.display = 'none';
-            if(e.target === draftCanvas) e.preventDefault();
-            
+            // Write Mode
             clearTimeout(convertTimer);
             isDrawing = true;
             statusText.innerText = "Writing...";
+            setupPen();
 
             const pos = getCoordinates(e);
-            points.push(pos);
-            
             strokeStartTime = Date.now();
             currentStrokeX = [Math.round(pos.x)];
             currentStrokeY = [Math.round(pos.y)];
             currentStrokeTime = [0];
-            
             updateBounds(pos.x, pos.y);
-            setupPen(draftCtx);
-        }
 
-        function draw(e) {
-            if (!isDrawing) return;
+            inkCtx.beginPath();
+            inkCtx.moveTo(pos.x, pos.y);
+        });
+
+        inkCanvas.addEventListener('pointermove', (e) => {
+            if (!isDrawing || currentMode !== 'write') return;
             e.preventDefault();
-            
+
             const pos = getCoordinates(e);
-            points.push(pos);
-            drawSmoothCurve();
+            inkCtx.lineTo(pos.x, pos.y);
+            inkCtx.stroke();
 
             currentStrokeX.push(Math.round(pos.x));
             currentStrokeY.push(Math.round(pos.y));
             currentStrokeTime.push(Date.now() - strokeStartTime);
-            
             updateBounds(pos.x, pos.y);
-        }
+        });
 
-        function stopDrawing(e) {
-            if (!isDrawing) return;
+        inkCanvas.addEventListener('pointerup', (e) => {
+            if (!isDrawing || currentMode !== 'write') return;
             isDrawing = false;
             
             if (currentStrokeX.length > 0) {
                 allStrokes.push([currentStrokeX, currentStrokeY, currentStrokeTime]);
             }
 
-            // Transfer the temporary stroke to the permanent ink layer!
-            // This prevents strokes from disappearing while writing letters like 't' or 'A'
-            inkCtx.drawImage(draftCanvas, 0, 0); 
-            draftCtx.clearRect(0, 0, draftCanvas.width, draftCanvas.height);
-            points = []; 
-            
+            // Wait 1.2s before converting
             convertTimer = setTimeout(convertToText, 1200);
-            statusText.innerText = "Waiting for pause...";
-        }
+            statusText.innerText = "Processing...";
+        });
 
-        // Draw Listeners
-        draftCanvas.addEventListener('mousedown', startDrawing);
-        draftCanvas.addEventListener('mousemove', draw);
-        window.addEventListener('mouseup', stopDrawing);
-        draftCanvas.addEventListener('touchstart', startDrawing, { passive: false });
-        draftCanvas.addEventListener('touchmove', draw, { passive: false });
-        window.addEventListener('touchend', stopDrawing);
-
-        // Clear Board
         document.getElementById('clearBtn').addEventListener('click', () => {
             inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
-            draftCtx.clearRect(0, 0, draftCanvas.width, draftCanvas.height);
-            textLayer.innerHTML = '';
-            translatorPopup.style.display = 'none';
-            resetStrokeData();
+            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+            textObjects = [];
+            hidePopup();
+            allStrokes = [];
+            bounds = null;
             statusText.innerText = "Board cleared.";
         });
 
-        function resetStrokeData() {
-            allStrokes = [];
-            bounds = null;
-            points = [];
-        }
-
-        // Convert Handwriting
+        // ---------------- TEXT CONVERSION (Google API) ---------------- //
         async function convertToText() {
             if (allStrokes.length === 0 || !bounds) return;
 
-            statusText.innerText = "Converting...";
-            const currentBounds = { ...bounds };
             const strokesToSend = [...allStrokes];
-            resetStrokeData(); 
+            const targetBounds = { ...bounds };
+            allStrokes = [];
+            bounds = null;
 
             const payload = {
-                app_version: 0.4, api_level: "537.36", device: "Mozilla/5.0", input_type: 0,
+                app_version: 0.4,
+                api_level: "537.36",
+                device: "Mozilla/5.0",
+                input_type: 0,
                 options: "enable_pre_space",
                 requests: [{
                     writing_guide: { writing_area: { width: inkCanvas.width, height: inkCanvas.height } },
-                    pre_context: "", max_num_results: 1, max_completions: 0,
-                    language: langSelect.value, ink: strokesToSend
+                    pre_context: "",
+                    max_num_results: 1,
+                    max_completions: 0,
+                    language: writeLangSelect.value,
+                    ink: strokesToSend
                 }]
             };
 
             try {
                 const response = await fetch("https://www.google.com/inputtools/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
+
                 const data = await response.json();
 
                 if (data[0] === "SUCCESS" && data[1][0][1].length > 0) {
-                    placeTextAsHTML(data[1][0][1][0], currentBounds);
+                    const text = data[1][0][1][0];
+                    saveTextObject(text, targetBounds);
+                    statusText.innerText = "Converted successfully.";
+                } else {
+                    statusText.innerText = "Couldn't read handwriting.";
                 }
             } catch (err) {
-                statusText.innerText = "Conversion failed.";
+                statusText.innerText = "Network error.";
             } finally {
+                // Clear the drawn ink only after processing is done
                 inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
-                statusText.innerText = "Ready.";
             }
         }
 
-        // Place text as actual selectable HTML
-        function placeTextAsHTML(text, box) {
-            const span = document.createElement('span');
-            span.className = 'board-text';
-            span.innerText = text;
+        // ---------------- TEXT RENDERING & SELECTION ---------------- //
+        function saveTextObject(text, box) {
+            const boxHeight = box.maxY - box.minY;
+            const fontSize = Math.max(20, Math.round(boxHeight * 0.8));
             
-            const fontSize = Math.max(18, Math.round((box.maxY - box.minY) * 0.85));
-            span.style.fontSize = `${fontSize}px`;
-            
-            // Position the HTML element exactly where the handwriting was
-            span.style.left = `${box.minX}px`;
-            span.style.top = `${box.minY}px`;
-            
-            // Add click event for translation
-            span.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openTranslator(span);
+            textCtx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
+            const metrics = textCtx.measureText(text);
+            const width = metrics.width;
+
+            // Store text metadata to allow clicking on it later
+            textObjects.push({
+                text: text,
+                x: box.minX,
+                y: box.minY,
+                w: width,
+                h: fontSize,
+                fontSize: fontSize
             });
-            
-            textLayer.appendChild(span);
+
+            redrawTextCanvas();
         }
 
-        // Translator Logic
-        function openTranslator(element) {
-            activeTextElement = element;
-            translateLang.value = ""; // Reset dropdown
+        function redrawTextCanvas() {
+            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
             
-            // Position popup above the text
-            const rect = element.getBoundingClientRect();
-            translatorPopup.style.display = 'flex';
-            translatorPopup.style.left = `${rect.left}px`;
-            translatorPopup.style.top = `${rect.top - 50}px`;
+            textObjects.forEach((obj, index) => {
+                textCtx.font = `bold ${obj.fontSize}px 'Segoe UI', Arial, sans-serif`;
+                textCtx.textBaseline = 'top'; // Easier bounding box hit testing
+                
+                // Highlight if selected
+                if (index === selectedTextIndex) {
+                    textCtx.fillStyle = 'rgba(0, 123, 255, 0.2)';
+                    textCtx.fillRect(obj.x - 5, obj.y - 5, obj.w + 10, obj.h + 10);
+                    textCtx.strokeStyle = '#007bff';
+                    textCtx.lineWidth = 2;
+                    textCtx.strokeRect(obj.x - 5, obj.y - 5, obj.w + 10, obj.h + 10);
+                }
+
+                textCtx.fillStyle = '#000000';
+                textCtx.fillText(obj.text, obj.x, obj.y);
+                
+                // Update width in case text changed due to translation
+                obj.w = textCtx.measureText(obj.text).width; 
+            });
         }
 
-        translateLang.addEventListener('change', async (e) => {
-            if (!activeTextElement || !e.target.value) return;
+        function handleSelection(e) {
+            const pos = getCoordinates(e);
+            let clickedIndex = -1;
+
+            // Check if click is inside any text object's bounding box
+            for (let i = textObjects.length - 1; i >= 0; i--) {
+                const obj = textObjects[i];
+                if (pos.x >= obj.x - 10 && pos.x <= obj.x + obj.w + 10 &&
+                    pos.y >= obj.y - 10 && pos.y <= obj.y + obj.h + 10) {
+                    clickedIndex = i;
+                    break;
+                }
+            }
+
+            selectedTextIndex = clickedIndex;
+            redrawTextCanvas();
+
+            if (clickedIndex !== -1) {
+                showTranslatePopup(textObjects[clickedIndex]);
+            } else {
+                hidePopup();
+            }
+        }
+
+        // ---------------- TRANSLATION LOGIC ---------------- //
+        function showTranslatePopup(obj) {
+            translatePopup.style.display = 'flex';
             
-            statusText.innerText = "Translating...";
-            const textToTranslate = activeTextElement.innerText;
-            const targetLang = e.target.value;
+            // Position popup slightly above the text
+            let popupX = obj.x;
+            let popupY = obj.y - 50; 
+            
+            if (popupY < 10) popupY = obj.y + obj.h + 20; // Show below if too close to top
+
+            translatePopup.style.left = `${popupX}px`;
+            translatePopup.style.top = `${popupY}px`;
+        }
+
+        function hidePopup() {
+            translatePopup.style.display = 'none';
+        }
+
+        document.getElementById('closePopupBtn').addEventListener('click', hidePopup);
+
+        translateBtn.addEventListener('click', async () => {
+            if (selectedTextIndex === -1) return;
+            
+            const obj = textObjects[selectedTextIndex];
+            const tl = targetLang.value;
+            const originalText = obj.text;
+            
+            translateBtn.innerText = "⏳...";
             
             try {
                 // Free Google Translate API Endpoint
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
-                const res = await fetch(url);
-                const data = await res.json();
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(originalText)}`;
+                const response = await fetch(url);
+                const data = await response.json();
                 
-                // Extract translated text and update the element
-                const translatedText = data[0].map(item => item[0]).join('');
-                activeTextElement.innerText = translatedText;
+                const translatedText = data[0][0][0];
                 
-                statusText.innerText = "Translated!";
-                translatorPopup.style.display = 'none'; // Auto hide after translating
+                // Update object and canvas
+                textObjects[selectedTextIndex].text = translatedText;
+                redrawTextCanvas();
+                statusText.innerText = "Translated successfully.";
             } catch (err) {
-                statusText.innerText = "Translation Error.";
+                console.error(err);
+                statusText.innerText = "Translation failed.";
+            } finally {
+                translateBtn.innerText = "Translate";
+                hidePopup();
+                selectedTextIndex = -1;
+                redrawTextCanvas(); // Remove highlight
             }
         });
-
     </script>
 </body>
 </html>
