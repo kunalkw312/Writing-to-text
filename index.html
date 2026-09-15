@@ -3,112 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smartboard - In-Place Handwriting to Text</title>
+    <title>Smartboard - Perfect Handwriting to Text</title>
     <style>
-        :root {
-            --primary: #4361ee;
-            --primary-hover: #3a56d4;
-            --danger: #ef476f;
-            --danger-hover: #d6335c;
-            --bg: #1e1e2f;
-            --panel: #2b2b40;
-            --text: #ffffff;
-        }
-
-        * {
-            box-sizing: border-box;
-            user-select: none;
-        }
-
         body {
             margin: 0;
-            padding: 16px;
-            background-color: var(--bg);
-            color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Devanagari", sans-serif;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden; /* Prevent scrolling */
         }
 
-        header {
+        .toolbar {
+            background-color: #ffffff;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
+            gap: 15px;
             align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            max-width: 1000px;
-            margin-bottom: 12px;
-        }
-
-        .controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
+            justify-content: center;
+            z-index: 10;
         }
 
         select, button {
-            outline: none;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            background: var(--panel);
-            color: #ffffff;
-            padding: 8px 16px;
-            font-size: 15px;
+            padding: 10px 15px;
+            font-size: 16px;
             border-radius: 8px;
+            border: 1px solid #ccc;
             cursor: pointer;
-            transition: all 0.2s ease;
+            outline: none;
+            background: #fff;
+            transition: 0.2s;
         }
 
-        select:focus, button:focus {
-            border-color: var(--primary);
-        }
-
-        button.btn-clear {
-            background-color: var(--danger);
+        select:focus { border-color: #007bff; }
+        
+        button {
+            background-color: #007bff;
+            color: white;
             border: none;
+            font-weight: bold;
         }
-        button.btn-clear:hover {
-            background-color: var(--danger-hover);
+        
+        button:hover { background-color: #0056b3; }
+        button.danger { background-color: #dc3545; }
+        button.danger:hover { background-color: #a71d2a; }
+
+        .status {
+            font-size: 14px;
+            color: #666;
+            margin-left: 15px;
+            font-weight: 500;
         }
 
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #a0aec0;
-        }
-
-        .indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: #06d6a0;
-        }
-
-        .indicator.busy {
-            background-color: #ffd166;
-            animation: pulse 1s infinite alternate;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(0.9); opacity: 0.7; }
-            100% { transform: scale(1.3); opacity: 1; }
-        }
-
-        #boardContainer {
+        .board-container {
             position: relative;
+            flex-grow: 1;
             width: 100%;
-            max-width: 1000px;
-            height: 600px;
             background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            overflow: hidden;
-            touch-action: none;
+            cursor: crosshair;
+            touch-action: none; /* Crucial for proper mobile drawing */
         }
 
         canvas {
@@ -117,131 +73,78 @@
             left: 0;
             width: 100%;
             height: 100%;
-            cursor: crosshair;
         }
 
-        /* Stroke Canvas is where ink is drawn */
-        #strokeCanvas {
-            z-index: 2;
-        }
-
-        /* Text Canvas holds recognized digital characters */
-        #textCanvas {
-            z-index: 1;
-        }
-
-        .footer-note {
-            margin-top: 10px;
-            font-size: 13px;
-            color: #8d99ae;
-            text-align: center;
-        }
+        /* The ink layer is above the text layer */
+        #textCanvas { z-index: 1; }
+        #inkCanvas { z-index: 2; }
     </style>
 </head>
 <body>
 
-    <header>
-        <div class="controls">
-            <label for="langSelect" style="font-weight: 600;">Language:</label>
-            <select id="langSelect">
-                <option value="mr">Marathi (मराठी)</option>
-                <option value="hi">Hindi (हिन्दी)</option>
-                <option value="en">English</option>
-                <option value="gu">Gujarati (ગુજરાતી)</option>
-                <option value="bn">Bengali (বাংলা)</option>
-                <option value="ta">Tamil (தமிழ்)</option>
-                <option value="te">Telugu (తెలుగు)</option>
-                <option value="kn">Kannada (ಕನ್ನಡ)</option>
-                <option value="ml">Malayalam (മലയാളം)</option>
-                <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
-                <option value="ur">Urdu (اُردُو)</option>
-            </select>
-            <button id="clearBtn" class="btn-clear">Clear Board</button>
-            <button id="undoBtn">Undo</button>
-        </div>
-        <div class="status-pill">
-            <div id="statusDot" class="indicator"></div>
-            <span id="statusText">Ready</span>
-        </div>
-    </header>
-
-    <div id="boardContainer">
-        <!-- Layer 1: Permanent converted text layer -->
-        <canvas id="textCanvas"></canvas>
-        <!-- Layer 2: Real-time pen stroke ink layer -->
-        <canvas id="strokeCanvas"></canvas>
+    <div class="toolbar">
+        <label for="lang" style="font-weight: bold; color: #333;">Language:</label>
+        <select id="lang">
+            <option value="en">English</option>
+            <option value="mr">Marathi (मराठी)</option>
+            <option value="hi">Hindi (हिन्दी)</option>
+            <option value="gu">Gujarati (ગુજરાતી)</option>
+            <option value="bn">Bengali (বাংলা)</option>
+            <option value="ta">Tamil (தமிழ்)</option>
+            <option value="te">Telugu (తెలుగు)</option>
+            <option value="kn">Kannada (ಕನ್ನಡ)</option>
+        </select>
+        <button id="clearBtn" class="danger">Clear Board</button>
+        <div class="status" id="statusText">Write anywhere on the board...</div>
     </div>
 
-    <div class="footer-note">
-        Write anywhere on the smartboard. When you finish a word and pause for 1 second, it will transform into crisp typed text at the exact same location and scale.
+    <div class="board-container" id="board">
+        <canvas id="textCanvas"></canvas>
+        <canvas id="inkCanvas"></canvas>
     </div>
 
     <script>
-        const container = document.getElementById('boardContainer');
-        const strokeCanvas = document.getElementById('strokeCanvas');
+        const inkCanvas = document.getElementById('inkCanvas');
         const textCanvas = document.getElementById('textCanvas');
-        const strokeCtx = strokeCanvas.getContext('2d');
+        const inkCtx = inkCanvas.getContext('2d');
         const textCtx = textCanvas.getContext('2d');
-
-        const langSelect = document.getElementById('langSelect');
-        const clearBtn = document.getElementById('clearBtn');
-        const undoBtn = document.getElementById('undoBtn');
-        const statusDot = document.getElementById('statusDot');
+        const board = document.getElementById('board');
         const statusText = document.getElementById('statusText');
+        const langSelect = document.getElementById('lang');
 
+        // State variables
         let isDrawing = false;
-        let strokeTimer = null;
-        const RECOGNIZE_DELAY_MS = 1000; // Trigger conversion 1s after pen lift
-
-        // Stroke data structures for handwriting model
-        // Format required by engine: [ [x_coords], [y_coords], [times] ]
+        let convertTimer = null;
+        let points = []; // For smooth drawing
+        
+        // Data for Google API
         let currentStrokeX = [];
         let currentStrokeY = [];
-        let currentStrokeT = [];
+        let currentStrokeTime = [];
         let allStrokes = [];
         let strokeStartTime = 0;
-
-        // Bounding box tracking for the active written word
         let bounds = null;
 
-        // Text layer history for undo
-        let textHistory = [];
-
+        // Ensure crisp drawing on all screens
         function resizeCanvases() {
-            const rect = container.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-
-            // Preserve existing text content through resize
-            const tempImg = textCtx.getImageData(0, 0, textCanvas.width, textCanvas.height);
-
-            strokeCanvas.width = rect.width * dpr;
-            strokeCanvas.height = rect.height * dpr;
-            textCanvas.width = rect.width * dpr;
-            textCanvas.height = rect.height * dpr;
-
-            strokeCtx.scale(dpr, dpr);
-            textCtx.scale(dpr, dpr);
-
-            saveTextState();
+            const rect = board.getBoundingClientRect();
+            
+            inkCanvas.width = rect.width;
+            inkCanvas.height = rect.height;
+            textCanvas.width = rect.width;
+            textCanvas.height = rect.height;
+            
+            setupPen();
         }
 
         window.addEventListener('resize', resizeCanvases);
+        resizeCanvases();
 
-        // Styling for ink pen
-        function setPenStyle() {
-            strokeCtx.strokeStyle = '#1d3557';
-            strokeCtx.lineWidth = 3.5;
-            strokeCtx.lineCap = 'round';
-            strokeCtx.lineJoin = 'round';
-        }
-
-        // Pointer event position extraction
-        function getPos(e) {
-            const rect = strokeCanvas.getBoundingClientRect();
-            return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
+        function setupPen() {
+            inkCtx.lineWidth = 4;
+            inkCtx.lineCap = 'round';
+            inkCtx.lineJoin = 'round';
+            inkCtx.strokeStyle = '#000000';
         }
 
         function updateBounds(x, y) {
@@ -255,111 +158,150 @@
             }
         }
 
-        function handlePointerDown(e) {
-            clearTimeout(strokeTimer);
-            isDrawing = true;
-
-            const pos = getPos(e);
-            strokeStartTime = Date.now();
-
-            currentStrokeX = [Math.round(pos.x)];
-            currentStrokeY = [Math.round(pos.y)];
-            currentStrokeT = [0];
-
-            updateBounds(pos.x, pos.y);
-
-            setPenStyle();
-            strokeCtx.beginPath();
-            strokeCtx.moveTo(pos.x, pos.y);
+        function getCoordinates(e) {
+            const rect = inkCanvas.getBoundingClientRect();
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            
+            // Handle touch events
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+            
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
         }
 
-        function handlePointerMove(e) {
+        // Draw smooth quadratic curves instead of jagged straight lines
+        function drawSmoothCurve() {
+            if (points.length < 3) {
+                const b = points[0];
+                inkCtx.beginPath();
+                inkCtx.arc(b.x, b.y, inkCtx.lineWidth / 2, 0, Math.PI * 2, !0);
+                inkCtx.fill();
+                inkCtx.closePath();
+                return;
+            }
+            
+            inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
+            inkCtx.beginPath();
+            inkCtx.moveTo(points[0].x, points[0].y);
+            
+            for (let i = 1; i < points.length - 2; i++) {
+                const c = (points[i].x + points[i + 1].x) / 2;
+                const d = (points[i].y + points[i + 1].y) / 2;
+                inkCtx.quadraticCurveTo(points[i].x, points[i].y, c, d);
+            }
+            
+            // For the last 2 points
+            inkCtx.quadraticCurveTo(
+                points[points.length - 2].x,
+                points[points.length - 2].y,
+                points[points.length - 1].x,
+                points[points.length - 1].y
+            );
+            inkCtx.stroke();
+        }
+
+        function startDrawing(e) {
+            e.preventDefault();
+            clearTimeout(convertTimer);
+            isDrawing = true;
+            statusText.innerText = "Writing...";
+
+            const pos = getCoordinates(e);
+            points.push(pos);
+            
+            strokeStartTime = Date.now();
+            currentStrokeX = [Math.round(pos.x)];
+            currentStrokeY = [Math.round(pos.y)];
+            currentStrokeTime = [0];
+            
+            updateBounds(pos.x, pos.y);
+            setupPen();
+        }
+
+        function draw(e) {
+            e.preventDefault();
             if (!isDrawing) return;
-            const pos = getPos(e);
+            
+            const pos = getCoordinates(e);
+            points.push(pos);
+            drawSmoothCurve();
 
             currentStrokeX.push(Math.round(pos.x));
             currentStrokeY.push(Math.round(pos.y));
-            currentStrokeT.push(Date.now() - strokeStartTime);
-
+            currentStrokeTime.push(Date.now() - strokeStartTime);
+            
             updateBounds(pos.x, pos.y);
-
-            strokeCtx.lineTo(pos.x, pos.y);
-            strokeCtx.stroke();
         }
 
-        function handlePointerUp() {
+        function stopDrawing(e) {
             if (!isDrawing) return;
+            e.preventDefault();
             isDrawing = false;
-
+            
             if (currentStrokeX.length > 0) {
-                allStrokes.push([currentStrokeX, currentStrokeY, currentStrokeT]);
+                allStrokes.push([currentStrokeX, currentStrokeY, currentStrokeTime]);
             }
 
-            // Schedule recognition once user pauses
-            clearTimeout(strokeTimer);
-            strokeTimer = setTimeout(processHandwriting, RECOGNIZE_DELAY_MS);
+            // Transfer the smooth temporary stroke to a permanent backup on the ink layer
+            // so we can clear 'points' array for the next stroke character
+            inkCtx.drawImage(inkCanvas, 0, 0); 
+            points = []; 
+            
+            // Wait 1.2 seconds after the user stops writing to trigger conversion
+            convertTimer = setTimeout(convertToText, 1200);
+            statusText.innerText = "Waiting for pause...";
         }
 
-        // Attach touch and stylus listeners with PointerEvents API
-        strokeCanvas.addEventListener('pointerdown', handlePointerDown);
-        strokeCanvas.addEventListener('pointermove', handlePointerMove);
-        strokeCanvas.addEventListener('pointerup', handlePointerUp);
-        strokeCanvas.addEventListener('pointercancel', handlePointerUp);
-        strokeCanvas.addEventListener('pointerleave', handlePointerUp);
+        // Event Listeners (Mouse)
+        inkCanvas.addEventListener('mousedown', startDrawing);
+        inkCanvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
 
-        function saveTextState() {
-            textHistory.push(textCtx.getImageData(0, 0, textCanvas.width, textCanvas.height));
-            if (textHistory.length > 20) textHistory.shift();
-        }
+        // Event Listeners (Touch)
+        inkCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+        inkCanvas.addEventListener('touchmove', draw, { passive: false });
+        window.addEventListener('touchend', stopDrawing);
 
-        undoBtn.addEventListener('click', () => {
-            if (textHistory.length > 1) {
-                textHistory.pop(); // discard current
-                const previous = textHistory[textHistory.length - 1];
-                textCtx.putImageData(previous, 0, 0);
-            } else if (textHistory.length === 1) {
-                textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
-                textHistory = [];
-            }
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
+            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+            resetStrokeData();
+            statusText.innerText = "Board cleared.";
         });
 
-        clearBtn.addEventListener('click', () => {
-            clearTimeout(strokeTimer);
-            strokeCtx.clearRect(0, 0, strokeCanvas.width, strokeCanvas.height);
-            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+        function resetStrokeData() {
             allStrokes = [];
             bounds = null;
-            textHistory = [];
-            saveTextState();
-        });
+            points = [];
+        }
 
-        // Online stroke handwriting recognition engine
-        async function processHandwriting() {
+        async function convertToText() {
             if (allStrokes.length === 0 || !bounds) return;
 
-            // Capture target geometry before state reset
-            const targetBounds = { ...bounds };
+            statusText.innerText = "Converting to text...";
+            
+            // Save bound data locally before resetting globals
+            const currentBounds = { ...bounds };
             const strokesToSend = [...allStrokes];
+            resetStrokeData(); 
 
-            // Reset buffers so the user can start a new word immediately
-            allStrokes = [];
-            bounds = null;
-
-            statusDot.classList.add('busy');
-            statusText.innerText = 'Converting...';
-
-            const rect = strokeCanvas.getBoundingClientRect();
             const payload = {
                 app_version: 0.4,
-                api_level: "533.0.0",
-                device: "5.0 (Windows)",
+                api_level: "537.36",
+                device: "Mozilla/5.0",
                 input_type: 0,
                 options: "enable_pre_space",
                 requests: [{
                     writing_guide: {
                         writing_area: {
-                            width: Math.round(rect.width),
-                            height: Math.round(rect.height)
+                            width: inkCanvas.width,
+                            height: inkCanvas.height
                         }
                     },
                     pre_context: "",
@@ -373,60 +315,42 @@
             try {
                 const response = await fetch("https://www.google.com/inputtools/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
 
-                if (data && data[0] === "SUCCESS" && data[1][0][1] && data[1][0][1].length > 0) {
-                    const convertedWord = data[1][0][1][0];
-                    renderConvertedText(convertedWord, targetBounds);
+                if (data[0] === "SUCCESS" && data[1][0][1].length > 0) {
+                    const text = data[1][0][1][0];
+                    placeTextOnBoard(text, currentBounds);
                 } else {
-                    console.warn("No match found for written input.");
+                    statusText.innerText = "Couldn't recognize handwriting.";
                 }
             } catch (err) {
-                console.error("Handwriting recognition network failed:", err);
+                console.error(err);
+                statusText.innerText = "Conversion error.";
             } finally {
-                // Clear the ink layer completely (converted text now resides on textCanvas)
-                strokeCtx.clearRect(0, 0, strokeCanvas.width, strokeCanvas.height);
-                statusDot.classList.remove('busy');
-                statusText.innerText = 'Ready';
+                // Clear the ink strokes after we attempt conversion
+                inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
             }
         }
 
-        function renderConvertedText(text, box) {
-            const strokeHeight = Math.max(22, box.maxY - box.minY);
-            const strokeWidth = Math.max(20, box.maxX - box.minX);
-
-            // Dynamically calculate font size proportional to hand-drawn size
-            let fontSize = Math.round(strokeHeight * 0.9);
-            const fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Devanagari", sans-serif';
-
-            textCtx.save();
-            textCtx.font = `600 ${fontSize}px ${fontFamily}`;
-            textCtx.fillStyle = '#111827';
-            textCtx.textBaseline = 'top';
-
-            // Scale down if the typed word width exceeds drawing width significantly
-            let measured = textCtx.measureText(text);
-            if (measured.width > strokeWidth * 1.5 && fontSize > 16) {
-                fontSize = Math.round(fontSize * (strokeWidth / measured.width) * 1.15);
-                textCtx.font = `600 ${fontSize}px ${fontFamily}`;
-            }
-
-            // Draw typed text exactly where the handwriting was
-            textCtx.fillText(text, box.minX, box.minY);
-            textCtx.restore();
-
-            saveTextState();
+        function placeTextOnBoard(text, box) {
+            const boxHeight = box.maxY - box.minY;
+            
+            // Calculate a proportional font size based on handwriting height
+            let fontSize = Math.max(18, Math.round(boxHeight * 0.85));
+            
+            textCtx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
+            textCtx.fillStyle = '#000000';
+            textCtx.textBaseline = 'bottom';
+            
+            // Render text at the bottom-left coordinate of the handwritten word
+            textCtx.fillText(text, box.minX, box.maxY);
+            
+            statusText.innerText = "Ready. Write anywhere.";
         }
-
-        // Initialize display sizes and history
-        resizeCanvases();
-        setPenStyle();
     </script>
 </body>
 </html>
