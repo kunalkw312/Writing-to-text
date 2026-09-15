@@ -112,6 +112,25 @@
                 <option value="en">English</option>
                 <option value="mr">Marathi (मराठी)</option>
                 <option value="hi">Hindi (हिन्दी)</option>
+                <option value="gu">Gujarati (ગુજરાતી)</option>
+                <option value="bn">Bengali (বাংলা)</option>
+                <option value="ta">Tamil (தமிழ்)</option>
+                <option value="te">Telugu (తెలుగు)</option>
+                <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                <option value="ml">Malayalam (മലയാളം)</option>
+                <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                <option value="ur">Urdu (اردو)</option>
+                <option value="or">Odia (ଓଡ଼ିଆ)</option>
+                <option value="as">Assamese (অসমীয়া)</option>
+                <option value="sa">Sanskrit (संस्कृतम्)</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="fr">French (Français)</option>
+                <option value="de">German (Deutsch)</option>
+                <option value="zh-CN">Chinese (中文)</option>
+                <option value="ja">Japanese (日本語)</option>
+                <option value="ko">Korean (한국어)</option>
+                <option value="ar">Arabic (العربية)</option>
+                <option value="ru">Russian (Русский)</option>
             </select>
         </div>
 
@@ -131,6 +150,25 @@
                 <option value="mr">To Marathi (मराठी)</option>
                 <option value="hi">To Hindi (हिन्दी)</option>
                 <option value="en">To English</option>
+                <option value="gu">To Gujarati (ગુજરાતી)</option>
+                <option value="bn">To Bengali (বাংলা)</option>
+                <option value="ta">To Tamil (தமிழ்)</option>
+                <option value="te">To Telugu (తెలుగు)</option>
+                <option value="kn">To Kannada (ಕನ್ನಡ)</option>
+                <option value="ml">To Malayalam (മലയാളം)</option>
+                <option value="pa">To Punjabi (ਪੰਜਾਬੀ)</option>
+                <option value="ur">To Urdu (اردو)</option>
+                <option value="or">To Odia (ଓଡ଼ିଆ)</option>
+                <option value="as">To Assamese (অসমীয়া)</option>
+                <option value="sa">To Sanskrit (संस्कृतम्)</option>
+                <option value="es">To Spanish (Español)</option>
+                <option value="fr">To French (Français)</option>
+                <option value="de">To German (Deutsch)</option>
+                <option value="zh-CN">To Chinese (中文)</option>
+                <option value="ja">To Japanese (日本語)</option>
+                <option value="ko">To Korean (한국어)</option>
+                <option value="ar">To Arabic (العربية)</option>
+                <option value="ru">To Russian (Русский)</option>
             </select>
             <button id="translateBtn" class="action-btn" style="padding: 6px 10px; font-size: 13px;">Translate</button>
             <button id="closePopupBtn" style="padding: 6px 10px; font-size: 13px;">✕</button>
@@ -326,7 +364,7 @@
 
                 const data = await response.json();
 
-                if (data[0] === "SUCCESS" && data[1][0][1].length > 0) {
+                if (data[0] === "SUCCESS" && data[1][0][1] && data[1][0][1].length > 0) {
                     const text = data[1][0][1][0];
                     saveTextObject(text, targetBounds);
                     statusText.innerText = "Converted successfully.";
