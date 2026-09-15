@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Smartboard - In-Place Handwriting</title>
+    <!-- Load Tesseract.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2c3e50;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        select, button {
+            padding: 10px 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        select {
+            background-color: white;
+            color: #333;
+        }
+
+        button.clear-btn {
+            background-color: #e74c3c;
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        button.clear-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .board-wrapper {
+            position: relative;
+        }
+
+        .board-container {
+            border: 4px solid #ecf0f1;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0px 8px 16px rgba(0,0,0,0.3);
+            overflow: hidden;
+            touch-action: none; /* Prevent mobile scrolling */
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* Live status indicator over the canvas */
+        #statusOverlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(41, 128, 185, 0.9);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            pointer-events: none;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .instructions {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #bdc3c7;
+            text-align: center;
+            max-width: 800px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Live Smartboard</h2>
+    
+    <div class="controls">
+        <label for="languageSelect">Language:</label>
+        <select id="languageSelect">
+            <option value="eng">English</option>
+            <option value="mar">Marathi (मराठी)</option>
+            <option value="hin">Hindi (हिन्दी)</option>
+            <option value="guj">Gujarati (ગુજરાતી)</option>
+            <option value="ben">Bengali (বাংলা)</option>
+            <option value="tam">Tamil (தமிழ்)</option>
+            <option value="tel">Telugu (తెలుగు)</option>
+            <option value="kan">Kannada (ಕನ್ನಡ)</option>
+        </select>
+
+        <button id="clearBtn" class="clear-btn">Clear Board</button>
+    </div>
+
+    <div class="board-wrapper">
+        <div id="statusOverlay">Processing...</div>
+        <div class="board-container">
+            <canvas id="smartboard" width="900" height="500"></canvas>
+        </div>
+    </div>
+
+    <div class="instructions">
+        <strong>How to use:</strong> Write a word on the board. Pause for 1.5 seconds. The board will automatically read your handwriting, wipe the ink, and replace it with typed text in the exact spot and size you wrote it. (First-time language loading may take a few seconds).
+    </div>
+
+    <script>
+        const canvas = document.getElementById('smartboard');
+        const ctx = canvas.getContext('2d');
+        const clearBtn = document.getElementById('clearBtn');
+        const languageSelect = document.getElementById('languageSelect');
+        const statusOverlay = document.getElementById('statusOverlay');
+
+        let isDrawing = false;
+        
+        // Auto-conversion timers and bounds
+        let typingTimer;
+        const doneTypingInterval = 1500; // Time to wait after last stroke (1.5 seconds)
+        let bounds = null;
+
+        // Initialize Canvas Background
+        function clearCanvas() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            bounds = null;
+        }
+
+        function setupPen() {
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'black';
+        }
+
+        clearCanvas();
+        setupPen();
+
+        // Get Mouse / Touch Position
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches && e.touches.length > 0) {
+                return {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                };
+            }
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        // Track the area being drawn on
+        function updateBounds(x, y) {
+            if (!bounds) {
+                bounds = { minX: x, minY: y, maxX: x, maxY: y };
+            } else {
+                bounds.minX = Math.min(bounds.minX, x);
+                bounds.minY = Math.min(bounds.minY, y);
+                bounds.maxX = Math.max(bounds.maxX, x);
+                bounds.maxY = Math.max(bounds.maxY, y);
+            }
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            clearTimeout(typingTimer); // Stop the auto-convert timer while writing
+            
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            updateBounds(pos.x, pos.y);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            updateBounds(pos.x, pos.y);
+        }
+
+        function stopDrawing() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            
+            // Start countdown to convert text once pen is lifted
+            clearTimeout(typingTimer);
+            if (bounds) {
+                typingTimer = setTimeout(convertLiveText, doneTypingInterval);
+            }
+        }
+
+        // Mouse Events
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        // Touch Events
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); }, { passive: false });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, { passive: false });
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); stopDrawing(); });
+
+        clearBtn.addEventListener('click', clearCanvas);
+
+        // Main Live Conversion Logic
+        async function convertLiveText() {
+            if (!bounds) return;
+
+            // 1. Add some padding around the writing for better OCR accuracy
+            const padding = 20;
+            const bx = Math.max(0, bounds.minX - padding);
+            const by = Math.max(0, bounds.minY - padding);
+            const bw = Math.min(canvas.width - bx, (bounds.maxX - bounds.minX) + (padding * 2));
+            const bh = Math.min(canvas.height - by, (bounds.maxY - bounds.minY) + (padding * 2));
+
+            // Don't process if the mark is too tiny (like a simple dot)
+            if (bw <= padding * 2.5 || bh <= padding * 2.5) {
+                bounds = null;
+                return;
+            }
+
+            statusOverlay.style.display = 'block';
+
+            // 2. Extract ONLY the area the user just drew into a temporary hidden canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = bw;
+            tempCanvas.height = bh;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Fill white background, then copy the snippet
+            tempCtx.fillStyle = 'white';
+            tempCtx.fillRect(0, 0, bw, bh);
+            tempCtx.drawImage(canvas, bx, by, bw, bh, 0, 0, bw, bh);
+
+            const selectedLanguage = languageSelect.value;
+
+            try {
+                // 3. Run OCR only on the temporary cropped image
+                const result = await Tesseract.recognize(tempCanvas, selectedLanguage);
+                const text = result.data.text.trim();
+
+                if (text) {
+                    // 4. Erase the handwritten ink by filling a white rectangle over the bounding box
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(bx, by, bw, bh);
+
+                    // 5. Calculate font size based on the height of the handwritten block
+                    // Multiply by 0.7 to roughly match handwritten height to standard font heights
+                    const fontSize = Math.max(16, Math.floor((bounds.maxY - bounds.minY) * 0.7));
+                    
+                    // 6. Draw the live text exactly where the handwriting was
+                    ctx.font = `${fontSize}px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+                    ctx.fillStyle = 'black';
+                    ctx.textBaseline = 'bottom';
+                    
+                    // Draw text starting at the left edge and bottom edge of their handwriting
+                    ctx.fillText(text, bounds.minX, bounds.maxY);
+                    
+                    // Re-apply pen settings just in case
+                    setupPen();
+                }
+            } catch (err) {
+                console.error("OCR Error: ", err);
+            } finally {
+                statusOverlay.style.display = 'none';
+                bounds = null; // Reset bounds for the next word
+            }
+        }
+    </script>
+</body>
+</html>
