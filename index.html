@@ -46,7 +46,7 @@
     <div class="bg-indigo-950/80 px-4 py-3 border-t border-indigo-800/50">
       <div class="max-w-6xl mx-auto flex flex-col md:flex-row gap-3 items-center justify-between">
         <!-- Search Input -->
-        <div class="relative w-full md:w-80">
+        <div class="relative w-full md:w-80 flex-shrink-0">
           <i class="ph ph-magnifying-glass absolute left-3 top-2.5 text-indigo-300"></i>
           <input 
             type="text" 
@@ -58,12 +58,15 @@
         </div>
 
         <!-- Filter Pills -->
-        <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs font-medium">
-          <button class="filter-btn px-3 py-1.5 rounded-full bg-amber-400 text-indigo-950 whitespace-nowrap font-semibold" data-filter="all" onclick="setFilter('all', this)">All Feeds</button>
+        <div class="flex items-center gap-1.5 overflow-x-auto w-full pb-1 md:pb-0 text-xs font-medium hide-scrollbar">
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-amber-400 text-indigo-950 whitespace-nowrap font-semibold" data-filter="all" onclick="setFilter('all', this)">All News</button>
           <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="The Hindu" onclick="setFilter('The Hindu', this)">The Hindu</button>
-          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="Explained" onclick="setFilter('Explained', this)">Express Explained</button>
-          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="PIB" onclick="setFilter('PIB', this)">PIB Updates</button>
-          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="bookmarks" onclick="setFilter('bookmarks', this)">Saved Only</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="Editorial" onclick="setFilter('Editorial', this)">Editorials</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="Opinion" onclick="setFilter('Opinion', this)">Opinions</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="Explained" onclick="setFilter('Explained', this)">Explained</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="Science" onclick="setFilter('Science', this)">Science</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="World" onclick="setFilter('World', this)">World (IR)</button>
+          <button class="filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap" data-filter="PIB" onclick="setFilter('PIB', this)">PIB</button>
         </div>
       </div>
     </div>
@@ -132,29 +135,46 @@
   </div>
 
   <script>
-    // Configuration of standard UPSC-relevant feeds
+    // Configuration of standard UPSC-relevant feeds (Added Editorial, Science, Opinion, World)
     const FEEDS = [
       {
         source: 'The Hindu',
         category: 'The Hindu',
-        url: 'https://www.thehindu.com/news/national/feeder/default.rss',
-        defaultTag: 'GS-2 / Polity'
+        url: 'https://www.thehindu.com/news/national/feeder/default.rss'
+      },
+      {
+        source: 'The Hindu Editorial',
+        category: 'Editorial',
+        url: 'https://www.thehindu.com/opinion/editorial/feeder/default.rss'
+      },
+      {
+        source: 'Indian Express',
+        category: 'Opinion',
+        url: 'https://indianexpress.com/section/opinion/feed/'
       },
       {
         source: 'Indian Express',
         category: 'Explained',
-        url: 'https://indianexpress.com/section/explained/feed/',
-        defaultTag: 'GS-3 / Analysis'
+        url: 'https://indianexpress.com/section/explained/feed/'
+      },
+      {
+        source: 'The Hindu Science',
+        category: 'Science',
+        url: 'https://www.thehindu.com/sci-tech/science/feeder/default.rss'
+      },
+      {
+        source: 'The Hindu World',
+        category: 'World',
+        url: 'https://www.thehindu.com/news/international/feeder/default.rss'
       },
       {
         source: 'Press Information Bureau',
         category: 'PIB',
-        url: 'https://archive.pib.gov.in/rss/pib_pressrelease.aspx',
-        defaultTag: 'Govt Schemes / Prelims'
+        url: 'https://archive.pib.gov.in/rss/pib_pressrelease.aspx'
       }
     ];
 
-    // Authentic Fallback Data (ensures the dashboard works immediately without CORS issues)
+    // Fallback Data for robustness
     const FALLBACK_NEWS = [
       {
         id: "fb-1",
@@ -168,43 +188,33 @@
       },
       {
         id: "fb-2",
-        title: "National Green Hydrogen Mission: Strategic Interventions for Energy Transition",
-        link: "https://indianexpress.com",
+        title: "The shifting sands of multipolarity in the Middle East",
+        link: "https://www.thehindu.com/opinion/editorial/",
         pubDate: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
-        source: "Indian Express",
-        category: "Explained",
-        syllabus: "GS-3: Economy & Clean Energy",
-        description: "Detailed analysis on incentives for domestic electrolyser manufacturing, green ammonia bunkering hubs, and lowering import dependency in hard-to-abate sectors."
+        source: "The Hindu Editorial",
+        category: "Editorial",
+        syllabus: "GS-2: International Relations",
+        description: "An editorial analysis of how regional powers are asserting autonomy in the Middle East, bypassing traditional Western hegemony to establish new trade and diplomatic corridors."
       },
       {
         id: "fb-3",
-        title: "Cabinet Approves Expansion of Pradhan Mantri Matsya Sampada Yojana",
-        link: "https://pib.gov.in",
+        title: "CRISPR-Cas9: New advancements in treating sickle cell anemia",
+        link: "https://www.thehindu.com/sci-tech/science/",
         pubDate: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
-        source: "Press Information Bureau",
-        category: "PIB",
-        syllabus: "Prelims / Schemes: Agriculture & Allied",
-        description: "The Union Cabinet cleared new financial components aiming to modernize coastal aquaculture, support cold chain logistics, and bolster seaweed cultivation for coastal livelihoods."
+        source: "The Hindu Science",
+        category: "Science",
+        syllabus: "GS-3: Science & Tech",
+        description: "Researchers have achieved a breakthrough using CRISPR-Cas9 gene editing to successfully modify stem cells, providing a potential cure for genetic blood disorders."
       },
       {
         id: "fb-4",
-        title: "ISRO's OceanSat & Earth Observation Systems: Climate Monitoring Applications",
-        link: "https://indianexpress.com",
-        pubDate: new Date(Date.now() - 86400000).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
-        source: "Indian Express",
-        category: "Explained",
-        syllabus: "GS-3: Science & Space Technology",
-        description: "An overview of how modern satellite radiometers track sea-surface temperatures, chlorophyll distribution, and early cyclone development across the Bay of Bengal."
-      },
-      {
-        id: "fb-5",
-        title: "RBI Guidelines on Digital Lending: Protecting Consumer Sovereignty",
-        link: "https://www.thehindu.com",
-        pubDate: new Date(Date.now() - 86400000).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
-        source: "The Hindu",
-        category: "The Hindu",
-        syllabus: "GS-3: Indian Economy & Banking",
-        description: "The Reserve Bank tightens regulatory norms regarding first-loss default guarantees (FLDG) and mandates transparent loan key fact statements for NBFCs and fintech partners."
+        title: "UN Climate Summit: Global South demands equitable transition funds",
+        link: "https://www.thehindu.com/news/international/",
+        pubDate: new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
+        source: "The Hindu World",
+        category: "World",
+        syllabus: "GS-3: Environment / GS-2: IR",
+        description: "At the latest COP summit, developing nations united to demand the operationalization of the Loss and Damage fund, citing historical emissions by developed countries."
       }
     ];
 
@@ -216,11 +226,15 @@
     // Automatically Tag Syllabus based on Keywords
     function detectSyllabus(title, desc) {
       const text = `${title} ${desc}`.toLowerCase();
-      if (text.match(/polity|constitution|court|judiciary|bill|parliament|governance|federal/)) return "GS-2: Polity & Governance";
-      if (text.match(/economy|rbi|gdp|inflation|fiscal|trade|budget|banking|rupee/)) return "GS-3: Economy";
-      if (text.match(/climate|environment|wildlife|isro|space|satellite|biodiversity|energy/)) return "GS-3: Env & Sci-Tech";
+      if (text.match(/international|world|diplomacy|foreign|un|who|wto|bilateral|treaty|border|global/)) return "GS-2: International Relations";
+      if (text.match(/science|technology|space|isro|nasa|health|disease|medical|gene|ai/)) return "GS-3: Science & Tech";
+      if (text.match(/polity|constitution|court|judiciary|bill|parliament|governance|federal|rights/)) return "GS-2: Polity & Governance";
+      if (text.match(/economy|rbi|gdp|inflation|fiscal|trade|budget|banking|rupee|tax/)) return "GS-3: Economy";
+      if (text.match(/climate|environment|wildlife|biodiversity|energy|pollution|emission/)) return "GS-3: Environment";
       if (text.match(/heritage|culture|art|history|monument|unesco/)) return "GS-1: Art & History";
-      if (text.match(/security|defence|border|cyber|army|navy/)) return "GS-3: Internal Security";
+      if (text.match(/security|defence|cyber|army|navy|terrorism|naxal/)) return "GS-3: Internal Security";
+      if (text.match(/society|women|poverty|population|education/)) return "GS-1: Indian Society";
+      if (text.match(/editorial|opinion|analysis/)) return "Mains Analysis";
       return "Prelims / General Issues";
     }
 
@@ -249,7 +263,7 @@
               pubDate: new Date(item.pubDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
               source: feed.source,
               category: feed.category,
-              syllabus: detectSyllabus(item.title, item.description || ''),
+              syllabus: detectSyllabus(item.title, item.description || feed.category),
               description: stripHtml(item.description || item.content || 'Click below to read full article.')
             }));
           }
@@ -263,14 +277,22 @@
       const results = await Promise.all(fetchPromises);
       fetchedArticles = results.flat();
 
-      // If online RSS is blocked or rate limited, gracefully preserve fallback items
       if (fetchedArticles.length === 0) {
         allArticles = FALLBACK_NEWS;
       } else {
-        // Merge fetched articles with our foundational prep data
-        allArticles = [...fetchedArticles, ...FALLBACK_NEWS];
+        // Remove duplicates by title to ensure clean feeds
+        const uniqueArticles = [];
+        const seenTitles = new Set();
+        [...fetchedArticles, ...FALLBACK_NEWS].forEach(item => {
+          if(!seenTitles.has(item.title)){
+             seenTitles.add(item.title);
+             uniqueArticles.push(item);
+          }
+        });
+        allArticles = uniqueArticles;
       }
 
+      // Sort by recency (most recent first) generally happens naturally via feed, but can be forced if needed.
       refreshBtn.classList.remove('animate-spin');
       render();
     }
@@ -314,7 +336,7 @@
                 <span class="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
                   ${item.source}
                 </span>
-                <span class="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">
+                <span class="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50 text-right">
                   ${item.syllabus}
                 </span>
               </div>
@@ -360,7 +382,7 @@
       const bBtn = document.getElementById('modal-bookmark-btn');
       bBtn.onclick = () => {
         toggleBookmark(item);
-        openModal(item);
+        openModal(item); // re-render modal state
       };
       bBtn.innerHTML = isBookmarked ? 
         `<i class="ph-fill ph-bookmark text-amber-500"></i> Saved` : 
@@ -394,7 +416,17 @@
 
     function toggleBookmarksView() {
       const bookmarkBtn = document.querySelector('[data-filter="bookmarks"]');
-      if (bookmarkBtn) setFilter('bookmarks', bookmarkBtn);
+      if (bookmarkBtn) {
+        setFilter('bookmarks', bookmarkBtn);
+      } else {
+        // If they click the icon without the pill being visible, reset styling and filter
+        currentFilter = 'bookmarks';
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.className = "filter-btn px-3 py-1.5 rounded-full bg-indigo-800/70 text-indigo-200 hover:bg-indigo-800 whitespace-nowrap";
+        });
+        document.getElementById('active-feed-label').textContent = 'Your Saved Revision List';
+        render();
+      }
     }
 
     // Bookmark Persistence
