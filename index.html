@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smartboard - Text & Math Handwriting</title>
     
-    <!-- KaTeX for Beautiful Math Rendering -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-
-    <!-- Nerdamer for Math Parsing & Solving -->
+    <!-- Nerdamer for Math Parsing & Solving (Background Only) -->
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/nerdamer.core.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Algebra.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Calculus.js"></script>
@@ -97,33 +93,36 @@
             cursor: crosshair;
         }
 
-        /* Container for recognized text & math overlays */
         #blocksContainer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             z-index: 1;
-            pointer-events: none; /* Let clicks pass through to canvas during write mode */
+            pointer-events: none; 
         }
 
-        /* The actual recognized blocks */
+        /* The actual recognized blocks - exactly as written */
         .recognized-block {
             position: absolute;
             padding: 4px 8px;
             border-radius: 8px;
             border: 2px solid transparent;
-            font-size: 26px; /* Scaled dynamically via JS */
+            font-size: 26px; 
             font-weight: bold;
             color: #1e293b;
             background: transparent;
-            pointer-events: auto; /* Always clickable */
+            pointer-events: auto; 
             user-select: none;
             transform-origin: top left;
             transition: all 0.2s ease;
-            white-space: nowrap;
+            white-space: pre-wrap; /* Crucial: Preserves exact spaces and breaks */
         }
+        
         .recognized-block.math-block {
             color: #6d28d9;
+            font-family: 'Cambria Math', 'Times New Roman', serif; /* Nice math font without altering layout */
+            font-style: italic;
         }
+        
         .recognized-block.selected {
             border-color: #007bff;
             background-color: rgba(0, 123, 255, 0.08);
@@ -176,9 +175,7 @@
         <div id="blocksContainer"></div>
         <canvas id="inkCanvas"></canvas>
         
-        <!-- Action Popup UI -->
         <div id="actionPopup">
-            <!-- Text Mode Controls -->
             <select id="targetLang" style="font-size: 13px; padding: 6px;">
                 <option value="mr">To Marathi (मराठी)</option>
                 <option value="hi">To Hindi (हिन्दी)</option>
@@ -187,10 +184,7 @@
                 <option value="fr">To French</option>
             </select>
             <button id="translateBtn" class="action-btn" style="padding: 6px 10px; font-size: 13px;">Translate</button>
-            
-            <!-- Math Mode Controls -->
             <button id="solveBtn" class="math-btn" style="padding: 6px 10px; font-size: 13px; display: none;">Solve Math</button>
-            
             <button id="closePopupBtn" style="padding: 6px 10px; font-size: 13px;">✕</button>
         </div>
     </div>
@@ -212,12 +206,10 @@
         const solveBtn = document.getElementById('solveBtn');
         const writeLangSelect = document.getElementById('writeLang');
 
-        // State
-        let currentMode = 'text'; // 'text', 'math', or 'select'
+        let currentMode = 'text'; 
         let blocks = []; 
         let selectedBlock = null;
         
-        // Drawing Variables
         let isDrawing = false;
         let convertTimer = null;
         let currentStrokeX = [], currentStrokeY = [], currentStrokeTime = [];
@@ -242,7 +234,6 @@
             inkCtx.strokeStyle = currentMode === 'math' ? '#8b5cf6' : '#1e293b';
         }
 
-        // --- MODE SWITCHING ---
         modeTextBtn.addEventListener('click', () => setMode('text'));
         modeMathBtn.addEventListener('click', () => setMode('math'));
         modeSelectBtn.addEventListener('click', () => setMode('select'));
@@ -278,7 +269,6 @@
             setupPen();
         }
 
-        // --- DRAWING LOGIC ---
         function getCoordinates(e) {
             const rect = inkCanvas.getBoundingClientRect();
             let clientX = e.clientX, clientY = e.clientY;
@@ -345,7 +335,6 @@
             statusText.innerText = "Board cleared.";
         });
 
-        // --- CONVERT HANDWRITING ---
         async function convertToText() {
             if (allStrokes.length === 0 || !bounds) return;
             const strokesToSend = [...allStrokes];
@@ -354,12 +343,9 @@
             allStrokes = [];
             bounds = null;
 
-            // FIX: Always use the selected standard language (e.g., 'en'). 
-            // The Google API doesn't accept "math" as a valid language code.
-            // English supports mathematical symbols perfectly well.
             let reqLang = writeLangSelect.value;
             if (isMathBlock) {
-                 reqLang = "en"; // Force English for Math to ensure math symbol support
+                 reqLang = "en"; 
             }
 
             const payload = {
@@ -393,12 +379,10 @@
             }
         }
 
-        // --- DOM BLOCK CREATION & VISUALS ---
         function createDOMBlock(rawText, box, isMath) {
             const div = document.createElement('div');
             div.className = 'recognized-block' + (isMath ? ' math-block' : '');
             
-            // Adjust position & font size relative to bounding box
             const boxHeight = box.maxY - box.minY;
             const fontSize = Math.max(22, Math.min(60, boxHeight * 0.85)); 
             div.style.left = `${Math.max(10, box.minX)}px`;
@@ -427,50 +411,18 @@
             blocks.push(blockData);
         }
 
-        // Formats raw text into KaTeX purely for EXACT display
-        function formatDisplayTeX(raw) {
-            let tex = raw;
-            // Handle × and ÷ visually
-            tex = tex.replace(/×/g, '\\times ');
-            tex = tex.replace(/÷/g, '\\div ');
-            
-            // "2 x 3" -> multiplication, "2x" -> variable
-            tex = tex.replace(/(?<=\d)\s+[xX]\s+(?=\d)/g, ' \\times ');
-            
-            // Capital X/Y to lowercase variables
-            tex = tex.replace(/X/g, 'x').replace(/Y/g, 'y');
-
-            // Handle Integrals & Roots visually exactly as placed
-            tex = tex.replace(/∫/g, '\\int ');
-            tex = tex.replace(/√/g, '\\sqrt ');
-            tex = tex.replace(/π/g, '\\pi ');
-
-            return tex;
-        }
-
+        // Renders the exact text, unaltered, maintaining native spaces
         function updateBlockVisuals(block) {
-            if (block.isMath) {
-                let displayString = formatDisplayTeX(block.rawText);
-                
-                // If we have a solved answer, append it
-                if (block.solution) {
-                    displayString = `${displayString} \\Rightarrow ${block.solution}`;
-                }
-                
-                try {
-                    katex.render(displayString, block.el, {
-                        throwOnError: false,
-                        displayMode: false // Inline mode to prevent weird line breaking
-                    });
-                } catch(e) {
-                    block.el.innerText = block.rawText; 
-                }
-            } else {
-                block.el.innerText = block.rawText;
+            let displayString = block.rawText;
+            
+            // Append the solved answer if it exists
+            if (block.solution) {
+                displayString = `${displayString} ➔ ${block.solution}`;
             }
+            
+            block.el.innerText = displayString;
         }
 
-        // --- POPUP UI ---
         function showPopup(block) {
             actionPopup.style.display = 'flex';
             
@@ -498,7 +450,6 @@
         }
         document.getElementById('closePopupBtn').addEventListener('click', hidePopup);
 
-        // --- TRANSLATE TEXT ---
         translateBtn.addEventListener('click', async () => {
             if (!selectedBlock) return;
             translateBtn.innerText = "⏳...";
@@ -517,45 +468,34 @@
             }
         });
 
-        // --- MATH ENGINE FORMATTER (Prepares raw text for Nerdamer logic) ---
+        // Background formatting for the Engine only (does not change visuals)
         function formatSolverString(expr) {
             let e = expr.trim();
             
-            // Swap exact unicode symbols for JS operators
             e = e.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
-            
-            // Logic for x vs multiply
-            e = e.replace(/(?<=\d)\s+[xX]\s+(?=\d)/g, '*'); // "2 x 3" -> "2 * 3"
+            e = e.replace(/(?<=\d)\s+[xX]\s+(?=\d)/g, '*'); 
             e = e.replace(/X/g, 'x').replace(/Y/g, 'y');
-            
-            // Standardize brackets
             e = e.replace(/\[/g, '(').replace(/\]/g, ')').replace(/\{/g, '(').replace(/\}/g, ')');
-            
-            // Greek Letters
             e = e.replace(/π/g, 'pi');
             
-            // Calculus: Integrals
             const intRegex = /∫\s*(.*?)\s*d([a-zA-Z])/i;
             if (intRegex.test(e)) {
                 e = e.replace(intRegex, 'integrate($1, $2)');
             } else if (e.includes('∫')) {
-                e = e.replace(/∫\s*(.*)/i, 'integrate($1, x)'); // fallback assumed 'x'
+                e = e.replace(/∫\s*(.*)/i, 'integrate($1, x)'); 
             }
             
-            // Calculus: Derivatives 
             const diffRegex = /d\/d([a-zA-Z])\s*\((.*?)\)/i;
             if (diffRegex.test(e)) {
                 e = e.replace(diffRegex, 'diff($2, $1)');
             }
             
-            // Square Roots
             e = e.replace(/√\s*\((.*?)\)/g, 'sqrt($1)');
             e = e.replace(/√\s*([a-zA-Z0-9]+)/g, 'sqrt($1)');
             
             return e;
         }
 
-        // --- SOLVE MATH ---
         solveBtn.addEventListener('click', () => {
             if (!selectedBlock) return;
             
@@ -563,27 +503,24 @@
             solveBtn.innerText = "⏳...";
             
             try {
-                let solutionTeX = "";
+                let solutionText = "";
 
                 if (solverExpr.includes('=')) {
-                    // Equation Solver
                     const parts = solverExpr.split('=');
                     const equation = `${parts[0].trim()} - (${parts[1].trim()})`;
                     const variables = nerdamer(equation).variables();
                     
                     if (variables.length > 0) {
                         const sol = nerdamer.solve(equation, variables[0]);
-                        solutionTeX = `${variables[0]} = ${sol.toTeX()}`;
+                        solutionText = `${variables[0]} = ${sol.toString()}`;
                     } else {
-                        solutionTeX = nerdamer(solverExpr).evaluate().toTeX();
+                        solutionText = nerdamer(solverExpr).evaluate().text();
                     }
                 } else {
-                    // Evaluator (Arithmetic & Calculus)
-                    solutionTeX = nerdamer(solverExpr).evaluate().toTeX();
+                    solutionText = nerdamer(solverExpr).evaluate().text();
                 }
 
-                // Render result
-                selectedBlock.solution = solutionTeX;
+                selectedBlock.solution = solutionText;
                 updateBlockVisuals(selectedBlock);
                 statusText.innerText = "Math solved.";
                 
