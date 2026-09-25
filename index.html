@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smartboard - Handwriting & Translation</title>
+    <title>Smartboard - Handwriting, Translation & Math Solver</title>
+    <!-- Include Nerdamer for Math Parsing & Solving -->
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/nerdamer.core.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Algebra.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Calculus.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Solve.js"></script>
+    
     <style>
         body {
             margin: 0;
@@ -54,6 +60,9 @@
         button.action-btn { background-color: #007bff; color: white; border: none; }
         button.action-btn:hover { background-color: #0056b3; }
         
+        button.math-btn { background-color: #8b5cf6; color: white; border: none; }
+        button.math-btn:hover { background-color: #7c3aed; }
+        
         button.toggle-btn { background-color: #e2e8f0; color: #333; border: 1px solid #cbd5e1; }
         button.toggle-btn.active { background-color: #10b981; color: white; border-color: #059669; }
         
@@ -82,8 +91,8 @@
         #textCanvas { z-index: 1; }
         #inkCanvas { z-index: 2; cursor: crosshair; }
 
-        /* Translation Popup */
-        #translatePopup {
+        /* Popup UI */
+        #actionPopup {
             position: absolute;
             display: none;
             background: white;
@@ -109,7 +118,7 @@
         <div class="toolbar-group" id="writeControls">
             <label for="writeLang" style="font-weight: bold; color: #333; font-size: 14px;">Input Lang:</label>
             <select id="writeLang">
-                <option value="en">English</option>
+                <option value="en">English (Text & Math)</option>
                 <option value="mr">Marathi (मराठी)</option>
                 <option value="hi">Hindi (हिन्दी)</option>
                 <option value="gu">Gujarati (ગુજરાતી)</option>
@@ -120,16 +129,12 @@
                 <option value="ml">Malayalam (മലയാളം)</option>
                 <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
                 <option value="ur">Urdu (اردو)</option>
-                <option value="or">Odia (ଓଡ଼ିଆ)</option>
-                <option value="as">Assamese (অসমীয়া)</option>
                 <option value="sa">Sanskrit (संस्कृतम्)</option>
                 <option value="es">Spanish (Español)</option>
                 <option value="fr">French (Français)</option>
                 <option value="de">German (Deutsch)</option>
                 <option value="zh-CN">Chinese (中文)</option>
                 <option value="ja">Japanese (日本語)</option>
-                <option value="ko">Korean (한국어)</option>
-                <option value="ar">Arabic (العربية)</option>
                 <option value="ru">Russian (Русский)</option>
             </select>
         </div>
@@ -144,33 +149,20 @@
         <canvas id="textCanvas"></canvas>
         <canvas id="inkCanvas"></canvas>
         
-        <!-- Translate Popup UI -->
-        <div id="translatePopup" style="display: none;">
-            <select id="targetLang">
+        <!-- Action Popup UI -->
+        <div id="actionPopup">
+            <select id="targetLang" style="font-size: 13px; padding: 6px;">
                 <option value="mr">To Marathi (मराठी)</option>
                 <option value="hi">To Hindi (हिन्दी)</option>
                 <option value="en">To English</option>
-                <option value="gu">To Gujarati (ગુજરાતી)</option>
-                <option value="bn">To Bengali (বাংলা)</option>
-                <option value="ta">To Tamil (தமிழ்)</option>
-                <option value="te">To Telugu (తెలుగు)</option>
-                <option value="kn">To Kannada (ಕನ್ನಡ)</option>
-                <option value="ml">To Malayalam (മലയാളം)</option>
-                <option value="pa">To Punjabi (ਪੰਜਾਬੀ)</option>
-                <option value="ur">To Urdu (اردو)</option>
-                <option value="or">To Odia (ଓଡ଼ିଆ)</option>
-                <option value="as">To Assamese (অসমীয়া)</option>
-                <option value="sa">To Sanskrit (संस्कृतम्)</option>
                 <option value="es">To Spanish (Español)</option>
                 <option value="fr">To French (Français)</option>
-                <option value="de">To German (Deutsch)</option>
                 <option value="zh-CN">To Chinese (中文)</option>
                 <option value="ja">To Japanese (日本語)</option>
-                <option value="ko">To Korean (한국어)</option>
-                <option value="ar">To Arabic (العربية)</option>
                 <option value="ru">To Russian (Русский)</option>
             </select>
             <button id="translateBtn" class="action-btn" style="padding: 6px 10px; font-size: 13px;">Translate</button>
+            <button id="solveBtn" class="math-btn" style="padding: 6px 10px; font-size: 13px;" title="Solves algebra, calculus, and basic math">Solve Math</button>
             <button id="closePopupBtn" style="padding: 6px 10px; font-size: 13px;">✕</button>
         </div>
     </div>
@@ -186,13 +178,14 @@
         
         const modeWriteBtn = document.getElementById('modeWrite');
         const modeSelectBtn = document.getElementById('modeSelect');
-        const translatePopup = document.getElementById('translatePopup');
+        const actionPopup = document.getElementById('actionPopup');
         const targetLang = document.getElementById('targetLang');
         const translateBtn = document.getElementById('translateBtn');
+        const solveBtn = document.getElementById('solveBtn');
 
         // Application State
-        let currentMode = 'write'; // 'write' or 'select'
-        let textObjects = []; // Stores recognized text blocks { text, x, y, w, h, fontSize }
+        let currentMode = 'write'; 
+        let textObjects = []; 
         let selectedTextIndex = -1;
         
         // Drawing State
@@ -244,7 +237,7 @@
                 modeSelectBtn.classList.add('active');
                 modeWriteBtn.classList.remove('active');
                 inkCanvas.style.cursor = 'pointer';
-                statusText.innerText = "Click on text to translate.";
+                statusText.innerText = "Click on text to translate or solve.";
             }
         }
 
@@ -270,13 +263,11 @@
             }
         }
 
-        // Pointer Events (Handles both Write and Select modes)
         inkCanvas.addEventListener('pointerdown', (e) => {
             if (currentMode === 'select') {
                 handleSelection(e);
                 return;
             }
-            // Write Mode
             clearTimeout(convertTimer);
             isDrawing = true;
             statusText.innerText = "Writing...";
@@ -315,7 +306,6 @@
                 allStrokes.push([currentStrokeX, currentStrokeY, currentStrokeTime]);
             }
 
-            // Wait 1.2s before converting
             convertTimer = setTimeout(convertToText, 1200);
             statusText.innerText = "Processing...";
         });
@@ -374,7 +364,6 @@
             } catch (err) {
                 statusText.innerText = "Network error.";
             } finally {
-                // Clear the drawn ink only after processing is done
                 inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
             }
         }
@@ -382,13 +371,12 @@
         // ---------------- TEXT RENDERING & SELECTION ---------------- //
         function saveTextObject(text, box) {
             const boxHeight = box.maxY - box.minY;
-            const fontSize = Math.max(20, Math.round(boxHeight * 0.8));
+            const fontSize = Math.max(22, Math.round(boxHeight * 0.8));
             
             textCtx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
             const metrics = textCtx.measureText(text);
             const width = metrics.width;
 
-            // Store text metadata to allow clicking on it later
             textObjects.push({
                 text: text,
                 x: box.minX,
@@ -405,10 +393,12 @@
             textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
             
             textObjects.forEach((obj, index) => {
-                textCtx.font = `bold ${obj.fontSize}px 'Segoe UI', Arial, sans-serif`;
-                textCtx.textBaseline = 'top'; // Easier bounding box hit testing
+                // Determine if it looks like math visually for styling (optional)
+                const isMath = /^[0-9xxyy+\-*/=^()\[\]\s\.,a-z]+$/.test(obj.text) && /[+\-*/=^]/.test(obj.text);
                 
-                // Highlight if selected
+                textCtx.font = `${isMath ? 'italic' : 'bold'} ${obj.fontSize}px 'Segoe UI', 'Cambria Math', sans-serif`;
+                textCtx.textBaseline = 'top'; 
+                
                 if (index === selectedTextIndex) {
                     textCtx.fillStyle = 'rgba(0, 123, 255, 0.2)';
                     textCtx.fillRect(obj.x - 5, obj.y - 5, obj.w + 10, obj.h + 10);
@@ -420,7 +410,6 @@
                 textCtx.fillStyle = '#000000';
                 textCtx.fillText(obj.text, obj.x, obj.y);
                 
-                // Update width in case text changed due to translation
                 obj.w = textCtx.measureText(obj.text).width; 
             });
         }
@@ -429,7 +418,6 @@
             const pos = getCoordinates(e);
             let clickedIndex = -1;
 
-            // Check if click is inside any text object's bounding box
             for (let i = textObjects.length - 1; i >= 0; i--) {
                 const obj = textObjects[i];
                 if (pos.x >= obj.x - 10 && pos.x <= obj.x + obj.w + 10 &&
@@ -443,32 +431,32 @@
             redrawTextCanvas();
 
             if (clickedIndex !== -1) {
-                showTranslatePopup(textObjects[clickedIndex]);
+                showPopup(textObjects[clickedIndex]);
             } else {
                 hidePopup();
             }
         }
 
-        // ---------------- TRANSLATION LOGIC ---------------- //
-        function showTranslatePopup(obj) {
-            translatePopup.style.display = 'flex';
+        // ---------------- ACTION POPUP LOGIC ---------------- //
+        function showPopup(obj) {
+            actionPopup.style.display = 'flex';
             
-            // Position popup slightly above the text
             let popupX = obj.x;
             let popupY = obj.y - 50; 
             
-            if (popupY < 10) popupY = obj.y + obj.h + 20; // Show below if too close to top
+            if (popupY < 10) popupY = obj.y + obj.h + 20;
 
-            translatePopup.style.left = `${popupX}px`;
-            translatePopup.style.top = `${popupY}px`;
+            actionPopup.style.left = `${popupX}px`;
+            actionPopup.style.top = `${popupY}px`;
         }
 
         function hidePopup() {
-            translatePopup.style.display = 'none';
+            actionPopup.style.display = 'none';
         }
 
         document.getElementById('closePopupBtn').addEventListener('click', hidePopup);
 
+        // ---------------- TRANSLATION ---------------- //
         translateBtn.addEventListener('click', async () => {
             if (selectedTextIndex === -1) return;
             
@@ -479,16 +467,13 @@
             translateBtn.innerText = "⏳...";
             
             try {
-                // Free Google Translate API Endpoint
                 const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(originalText)}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
                 const translatedText = data[0][0][0];
                 
-                // Update object and canvas
                 textObjects[selectedTextIndex].text = translatedText;
-                redrawTextCanvas();
                 statusText.innerText = "Translated successfully.";
             } catch (err) {
                 console.error(err);
@@ -497,7 +482,62 @@
                 translateBtn.innerText = "Translate";
                 hidePopup();
                 selectedTextIndex = -1;
-                redrawTextCanvas(); // Remove highlight
+                redrawTextCanvas(); 
+            }
+        });
+
+        // ---------------- MATH SOLVER ---------------- //
+        solveBtn.addEventListener('click', () => {
+            if (selectedTextIndex === -1) return;
+            
+            const obj = textObjects[selectedTextIndex];
+            let mathExpr = obj.text.trim();
+            
+            // Basic cleanup of common handwriting OCR mistakes for math
+            mathExpr = mathExpr.replace(/X/g, 'x')
+                               .replace(/Y/g, 'y')
+                               .replace(/\[/g, '(')                                .replace(/\]/g, ')')
+                               .replace(/{/g, '(')
+                               .replace(/}/g, ')');
+            
+            solveBtn.innerText = "⏳...";
+            
+            try {
+                let result = "";
+
+                // Equation Solving Logic (e.g. "2x+4=12")
+                if (mathExpr.includes('=')) {
+                    const parts = mathExpr.split('=');
+                    // Create an expression: left - (right) = 0
+                    const equation = `${parts[0].trim()} - (${parts[1].trim()})`;
+                    const variables = nerdamer(equation).variables();
+                    
+                    if (variables.length > 0) {
+                        // Solve for the first variable found
+                        const sol = nerdamer.solve(equation, variables[0]);
+                        result = `${variables[0]} = ${sol.toString()}`;
+                    } else {
+                        // If no variables (e.g., checking if 2+2=4)
+                        result = nerdamer(mathExpr).evaluate().text();
+                    }
+                } else {
+                    // Evaluation / Calculus / Simplification Logic
+                    // Evaluates things like "integrate(x^2, x)", "diff(x^2, x)", "sin(45 deg)", "2+2/4"
+                    result = nerdamer(mathExpr).evaluate().text();
+                }
+
+                // Append solution to the canvas text
+                textObjects[selectedTextIndex].text = `${mathExpr} ➔ ${result}`;
+                statusText.innerText = "Math solved successfully.";
+            } catch (err) {
+                console.error(err);
+                statusText.innerText = "Invalid math expression.";
+                alert("Could not solve. Ensure proper math formatting. For complex ops, write explicit commands like 'integrate(x^2, x)' or 'diff(x^2, x)'.");
+            } finally {
+                solveBtn.innerText = "Solve Math";
+                hidePopup();
+                selectedTextIndex = -1;
+                redrawTextCanvas();
             }
         });
     </script>
