@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smartboard - Text & Math Handwriting</title>
-    <!-- Include Nerdamer for Math Parsing & Solving -->
+    
+    <!-- KaTeX for Beautiful Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+    <!-- Nerdamer for Math Parsing & Solving -->
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/nerdamer.core.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Algebra.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Calculus.js"></script>
@@ -88,10 +93,41 @@
             left: 0;
             width: 100%;
             height: 100%;
+            z-index: 2;
+            cursor: crosshair;
         }
 
-        #textCanvas { z-index: 1; }
-        #inkCanvas { z-index: 2; cursor: crosshair; }
+        /* Container for recognized text & math overlays */
+        #blocksContainer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1;
+            pointer-events: none; /* Let clicks pass through to canvas during write mode */
+        }
+
+        /* The actual recognized blocks */
+        .recognized-block {
+            position: absolute;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e293b;
+            background: transparent;
+            pointer-events: auto; /* Always clickable */
+            user-select: none;
+            transform-origin: top left;
+            transition: all 0.2s ease;
+        }
+        .recognized-block.math-block {
+            color: #6d28d9;
+        }
+        .recognized-block.selected {
+            border-color: #007bff;
+            background-color: rgba(0, 123, 255, 0.08);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
 
         /* Popup UI */
         #actionPopup {
@@ -115,7 +151,7 @@
         <div class="toolbar-group">
             <button id="modeText" class="toggle-btn text-mode active">✍️ Text Pen</button>
             <button id="modeMath" class="toggle-btn math-mode">🧮 Math Pen</button>
-            <button id="modeSelect" class="toggle-btn select-mode">👆 Select</button>
+            <button id="modeSelect" class="toggle-btn select-mode">👆 Select Block</button>
         </div>
         
         <div class="toolbar-group" id="writeControls">
@@ -126,7 +162,6 @@
                 <option value="hi">Hindi (हिन्दी)</option>
                 <option value="es">Spanish (Español)</option>
                 <option value="fr">French (Français)</option>
-                <option value="zh-CN">Chinese (中文)</option>
             </select>
         </div>
 
@@ -137,12 +172,12 @@
     </div>
 
     <div class="board-container" id="board">
-        <canvas id="textCanvas"></canvas>
+        <div id="blocksContainer"></div>
         <canvas id="inkCanvas"></canvas>
         
         <!-- Action Popup UI -->
         <div id="actionPopup">
-            <!-- Language dropdown for Text Mode -->
+            <!-- Text Mode Controls -->
             <select id="targetLang" style="font-size: 13px; padding: 6px;">
                 <option value="mr">To Marathi (मराठी)</option>
                 <option value="hi">To Hindi (हिन्दी)</option>
@@ -152,7 +187,7 @@
             </select>
             <button id="translateBtn" class="action-btn" style="padding: 6px 10px; font-size: 13px;">Translate</button>
             
-            <!-- Solver button for Math Mode -->
+            <!-- Math Mode Controls -->
             <button id="solveBtn" class="math-btn" style="padding: 6px 10px; font-size: 13px; display: none;">Solve Math</button>
             
             <button id="closePopupBtn" style="padding: 6px 10px; font-size: 13px;">✕</button>
@@ -161,12 +196,10 @@
 
     <script>
         const inkCanvas = document.getElementById('inkCanvas');
-        const textCanvas = document.getElementById('textCanvas');
         const inkCtx = inkCanvas.getContext('2d', { willReadFrequently: true });
-        const textCtx = textCanvas.getContext('2d');
         const board = document.getElementById('board');
+        const blocksContainer = document.getElementById('blocksContainer');
         const statusText = document.getElementById('statusText');
-        const writeLangSelect = document.getElementById('writeLang');
         
         const modeTextBtn = document.getElementById('modeText');
         const modeMathBtn = document.getElementById('modeMath');
@@ -176,11 +209,12 @@
         const targetLang = document.getElementById('targetLang');
         const translateBtn = document.getElementById('translateBtn');
         const solveBtn = document.getElementById('solveBtn');
+        const writeLangSelect = document.getElementById('writeLang');
 
         // State
         let currentMode = 'text'; // 'text', 'math', or 'select'
-        let textObjects = []; 
-        let selectedTextIndex = -1;
+        let blocks = []; // Array of DOM objects
+        let selectedBlock = null;
         
         // Drawing Variables
         let isDrawing = false;
@@ -190,28 +224,24 @@
         let strokeStartTime = 0;
         let bounds = null;
 
-        function resizeCanvases() {
+        function resizeCanvas() {
             const rect = board.getBoundingClientRect();
             inkCanvas.width = rect.width;
             inkCanvas.height = rect.height;
-            textCanvas.width = rect.width;
-            textCanvas.height = rect.height;
             setupPen();
-            redrawTextCanvas();
         }
 
-        window.addEventListener('resize', resizeCanvases);
-        resizeCanvases();
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         function setupPen() {
             inkCtx.lineWidth = 4;
             inkCtx.lineCap = 'round';
             inkCtx.lineJoin = 'round';
-            // Black for text, Purple for math
             inkCtx.strokeStyle = currentMode === 'math' ? '#8b5cf6' : '#1e293b';
         }
 
-        // Mode Switching
+        // --- MODE SWITCHING ---
         modeTextBtn.addEventListener('click', () => setMode('text'));
         modeMathBtn.addEventListener('click', () => setMode('math'));
         modeSelectBtn.addEventListener('click', () => setMode('select'));
@@ -221,26 +251,33 @@
             modeTextBtn.classList.remove('active');
             modeMathBtn.classList.remove('active');
             modeSelectBtn.classList.remove('active');
+            
             hidePopup();
-            selectedTextIndex = -1;
-            redrawTextCanvas();
+            if(selectedBlock) {
+                selectedBlock.el.classList.remove('selected');
+                selectedBlock = null;
+            }
 
             if (mode === 'text') {
                 modeTextBtn.classList.add('active');
-                inkCanvas.style.cursor = 'crosshair';
-                statusText.innerText = "✍️ Text Mode";
+                inkCanvas.style.pointerEvents = 'auto'; // Enable drawing
+                blocksContainer.style.pointerEvents = 'none'; // Clicks pass through
+                statusText.innerText = "✍️ Text Pen Active";
             } else if (mode === 'math') {
                 modeMathBtn.classList.add('active');
-                inkCanvas.style.cursor = 'crosshair';
-                statusText.innerText = "🧮 Math Mode (Draw equations, integrals, etc.)";
+                inkCanvas.style.pointerEvents = 'auto';
+                blocksContainer.style.pointerEvents = 'none';
+                statusText.innerText = "🧮 Math Pen (Calculus, Algebra, Arithmetic)";
             } else {
                 modeSelectBtn.classList.add('active');
-                inkCanvas.style.cursor = 'pointer';
-                statusText.innerText = "👆 Click a block to act on it.";
+                inkCanvas.style.pointerEvents = 'none'; // Disable canvas drawing
+                blocksContainer.style.pointerEvents = 'auto'; // Enable clicking divs
+                statusText.innerText = "👆 Click any recognized text or math block.";
             }
             setupPen();
         }
 
+        // --- DRAWING LOGIC ---
         function getCoordinates(e) {
             const rect = inkCanvas.getBoundingClientRect();
             let clientX = e.clientX, clientY = e.clientY;
@@ -261,8 +298,6 @@
         }
 
         inkCanvas.addEventListener('pointerdown', (e) => {
-            if (currentMode === 'select') return handleSelection(e);
-            
             clearTimeout(convertTimer);
             isDrawing = true;
             statusText.innerText = "Writing...";
@@ -280,7 +315,7 @@
         });
 
         inkCanvas.addEventListener('pointermove', (e) => {
-            if (!isDrawing || currentMode === 'select') return;
+            if (!isDrawing) return;
             e.preventDefault();
 
             const pos = getCoordinates(e);
@@ -294,7 +329,7 @@
         });
 
         inkCanvas.addEventListener('pointerup', (e) => {
-            if (!isDrawing || currentMode === 'select') return;
+            if (!isDrawing) return;
             isDrawing = false;
             
             if (currentStrokeX.length > 0) {
@@ -306,21 +341,21 @@
 
         document.getElementById('clearBtn').addEventListener('click', () => {
             inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
-            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
-            textObjects = [];
+            blocksContainer.innerHTML = '';
+            blocks = [];
             hidePopup();
             allStrokes = [];
             bounds = null;
             statusText.innerText = "Board cleared.";
         });
 
-        // ---------------- TEXT CONVERSION ---------------- //
+        // --- CONVERT HANDWRITING VIA API ---
         async function convertToText() {
             if (allStrokes.length === 0 || !bounds) return;
 
             const strokesToSend = [...allStrokes];
             const targetBounds = { ...bounds };
-            const isMathBlock = (currentMode === 'math'); // Tag the block type
+            const isMathBlock = (currentMode === 'math');
             allStrokes = [];
             bounds = null;
 
@@ -343,7 +378,7 @@
 
                 if (data[0] === "SUCCESS" && data[1][0][1] && data[1][0][1].length > 0) {
                     let text = data[1][0][1][0];
-                    saveTextObject(text, targetBounds, isMathBlock);
+                    createDOMBlock(text, targetBounds, isMathBlock);
                     statusText.innerText = "Converted successfully.";
                 } else {
                     statusText.innerText = "Couldn't read handwriting.";
@@ -355,85 +390,83 @@
             }
         }
 
-        // ---------------- RENDERING & SELECTION ---------------- //
-        function saveTextObject(text, box, isMath) {
-            const boxHeight = box.maxY - box.minY;
-            const fontSize = Math.max(22, Math.round(boxHeight * 0.8));
+        // --- CREATE DOM ELEMENT BLOCK ---
+        function createDOMBlock(rawText, box, isMath) {
+            const div = document.createElement('div');
+            div.className = 'recognized-block' + (isMath ? ' math-block' : '');
             
-            textCtx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
-            const metrics = textCtx.measureText(text);
-
-            textObjects.push({
-                text: text,
-                x: box.minX,
-                y: box.minY,
-                w: metrics.width,
-                h: fontSize,
-                fontSize: fontSize,
-                isMath: isMath // Differentiates functionality
-            });
-            redrawTextCanvas();
-        }
-
-        function redrawTextCanvas() {
-            textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+            // Positioning based on handwriting bounds
+            div.style.left = `${Math.max(10, box.minX)}px`;
+            div.style.top = `${Math.max(10, box.minY - 15)}px`;
             
-            textObjects.forEach((obj, index) => {
-                // Style differently if it's a Math block
-                if (obj.isMath) {
-                    textCtx.font = `italic ${obj.fontSize}px 'Cambria Math', 'Times New Roman', serif`;
-                    textCtx.fillStyle = '#6d28d9'; // Dark purple for math
-                } else {
-                    textCtx.font = `bold ${obj.fontSize}px 'Segoe UI', sans-serif`;
-                    textCtx.fillStyle = '#000000'; // Black for text
-                }
+            const blockData = {
+                id: Date.now(),
+                el: div,
+                rawText: rawText,
+                isMath: isMath,
+                solution: null
+            };
 
-                textCtx.textBaseline = 'top'; 
+            // Render content
+            updateBlockVisuals(blockData);
+
+            // Add Click Event for Selection
+            div.addEventListener('click', (e) => {
+                if(currentMode !== 'select') return;
                 
-                if (index === selectedTextIndex) {
-                    textCtx.fillStyle = 'rgba(0, 123, 255, 0.2)';
-                    textCtx.fillRect(obj.x - 5, obj.y - 5, obj.w + 10, obj.h + 10);
-                    textCtx.strokeStyle = '#007bff';
-                    textCtx.lineWidth = 2;
-                    textCtx.strokeRect(obj.x - 5, obj.y - 5, obj.w + 10, obj.h + 10);
-                    
-                    // Reset fill for text
-                    textCtx.fillStyle = obj.isMath ? '#6d28d9' : '#000000';
-                }
-
-                textCtx.fillText(obj.text, obj.x, obj.y);
-                obj.w = textCtx.measureText(obj.text).width; 
+                // Clear previous selection
+                if(selectedBlock) selectedBlock.el.classList.remove('selected');
+                
+                selectedBlock = blockData;
+                selectedBlock.el.classList.add('selected');
+                
+                showPopup(selectedBlock);
             });
+
+            blocksContainer.appendChild(div);
+            blocks.push(blockData);
         }
 
-        function handleSelection(e) {
-            const pos = getCoordinates(e);
-            let clickedIndex = -1;
-
-            for (let i = textObjects.length - 1; i >= 0; i--) {
-                const obj = textObjects[i];
-                if (pos.x >= obj.x - 10 && pos.x <= obj.x + obj.w + 10 &&
-                    pos.y >= obj.y - 10 && pos.y <= obj.y + obj.h + 10) {
-                    clickedIndex = i;
-                    break;
+        function updateBlockVisuals(block) {
+            if (block.isMath) {
+                let displayString = block.rawText;
+                if (block.solution) {
+                    displayString = `${block.rawText} \\Rightarrow ${block.solution}`;
+                } else {
+                    // Try to parse basic things to TeX just for initial nice looks
+                    try {
+                        let preprocessed = preprocessMath(block.rawText);
+                        displayString = getEquationTeX(preprocessed);
+                    } catch(e) {} // Fallback to raw if parser complains about incomplete equation
                 }
-            }
-
-            selectedTextIndex = clickedIndex;
-            redrawTextCanvas();
-
-            if (clickedIndex !== -1) {
-                showPopup(textObjects[clickedIndex]);
+                
+                // Use KaTeX to render beautifully
+                try {
+                    katex.render(displayString, block.el, {
+                        throwOnError: false,
+                        displayMode: true
+                    });
+                } catch(e) {
+                    block.el.innerText = block.rawText; 
+                }
             } else {
-                hidePopup();
+                block.el.innerText = block.rawText;
             }
         }
 
-        function showPopup(obj) {
+        function getEquationTeX(expr) {
+            if(expr.includes('=')) {
+                let parts = expr.split('=');
+                return nerdamer(parts[0]).toTeX() + " = " + nerdamer(parts[1]).toTeX();
+            }
+            return nerdamer(expr).toTeX();
+        }
+
+        // --- POPUP UI ---
+        function showPopup(block) {
             actionPopup.style.display = 'flex';
             
-            // Toggle buttons based on text type
-            if (obj.isMath) {
+            if (block.isMath) {
                 targetLang.style.display = 'none';
                 translateBtn.style.display = 'none';
                 solveBtn.style.display = 'block';
@@ -443,9 +476,10 @@
                 solveBtn.style.display = 'none';
             }
 
-            let popupX = obj.x;
-            let popupY = obj.y - 50; 
-            if (popupY < 10) popupY = obj.y + obj.h + 20;
+            const rect = block.el.getBoundingClientRect();
+            let popupX = rect.left;
+            let popupY = rect.top - 55; 
+            if (popupY < 10) popupY = rect.bottom + 10;
 
             actionPopup.style.left = `${popupX}px`;
             actionPopup.style.top = `${popupY}px`;
@@ -454,77 +488,82 @@
         function hidePopup() {
             actionPopup.style.display = 'none';
         }
-
         document.getElementById('closePopupBtn').addEventListener('click', hidePopup);
 
-        // ---------------- TRANSLATE TEXT ---------------- //
+        // --- TRANSLATE TEXT ---
         translateBtn.addEventListener('click', async () => {
-            if (selectedTextIndex === -1) return;
-            const obj = textObjects[selectedTextIndex];
+            if (!selectedBlock) return;
             translateBtn.innerText = "⏳...";
             
             try {
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang.value}&dt=t&q=${encodeURIComponent(obj.text)}`;
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang.value}&dt=t&q=${encodeURIComponent(selectedBlock.rawText)}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                textObjects[selectedTextIndex].text = data[0][0][0];
+                selectedBlock.rawText = data[0][0][0];
+                updateBlockVisuals(selectedBlock);
                 statusText.innerText = "Translated successfully.";
             } catch (err) {
                 statusText.innerText = "Translation failed.";
             } finally {
                 translateBtn.innerText = "Translate";
                 hidePopup();
-                selectedTextIndex = -1;
-                redrawTextCanvas(); 
             }
         });
 
-        // ---------------- ADVANCED MATH SOLVER ---------------- //
-        
-        // Translates raw unicode characters into formatting Nerdamer understands
-        function parseToNerdamerFormat(expr) {
+        // --- MATH INTELLIGENT PRE-PROCESSOR ---
+        function preprocessMath(expr) {
             let e = expr.trim();
-            // Basic fixes
-            e = e.replace(/X/g, 'x').replace(/Y/g, 'y')
-                 .replace(/π/g, 'pi')
-                 .replace(/×/g, '*').replace(/÷/g, '/')
-                 .replace(/−/g, '-') // unicode minus to ascii hyphen
-                 .replace(/\[/g, '(').replace(/\]/g, ')').replace(/{/g, '(').replace(/}/g, ')');
             
-            // Handle Square Roots: √x -> sqrt(x)
-            e = e.replace(/√\s*([a-zA-Z0-9]+)/g, 'sqrt($1)');
-            e = e.replace(/√/g, 'sqrt'); 
-
-            // Handle Integrals: ∫ x^2 dx -> integrate(x^2, x)
+            // 1. Swap strict unicode multiplication/division
+            e = e.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+            
+            // 2. Fix the "x vs ×" problem using regex:
+            // If 'x' or 'X' is tightly sandwiched between two numbers (e.g. "2 x 3" or "2x3"), it means multiply.
+            e = e.replace(/(?<=\d)\s*[xX]\s*(?=\d)/g, '*');
+            
+            // 3. Convert any remaining X or Y to lowercase for algebra
+            e = e.replace(/X/g, 'x').replace(/Y/g, 'y');
+            
+            // 4. Standardize brackets
+            e = e.replace(/\[/g, '(').replace(/\]/g, ')').replace(/\{/g, '(').replace(/\}/g, ')');
+            
+            // 5. Greek Letters & Symbols
+            e = e.replace(/π/g, 'pi').replace(/θ/g, 'theta').replace(/α/g, 'alpha').replace(/β/g, 'beta');
+            
+            // 6. Calculus formatting for Nerdamer
+            // Integrals: "∫ x^2 dx" -> "integrate(x^2, x)"
             const intRegex = /∫\s*(.*?)\s*d([a-zA-Z])/i;
             if (intRegex.test(e)) {
-                e = e.replace(intRegex, (match, formula, variable) => `integrate(${formula}, ${variable})`);
-            } else {
-                // Fallback: ∫ x^2 -> integrate(x^2, x)
-                e = e.replace(/∫\s*(.*)/i, (match, formula) => `integrate(${formula}, x)`);
+                e = e.replace(intRegex, 'integrate($1, $2)');
+            } else if (e.includes('∫')) {
+                e = e.replace(/∫\s*(.*)/i, 'integrate($1, x)'); // fallback
             }
-
-            // Handle Derivatives: d/dx(x^2) -> diff(x^2, x)
+            
+            // Derivatives: "d/dx (x^2)" -> "diff(x^2, x)"
             const diffRegex = /d\/d([a-zA-Z])\s*\((.*?)\)/i;
             if (diffRegex.test(e)) {
-                e = e.replace(diffRegex, (match, variable, formula) => `diff(${formula}, ${variable})`);
+                e = e.replace(diffRegex, 'diff($2, $1)');
             }
-
+            
+            // Square Roots: "√x" -> "sqrt(x)", "√(x+1)" -> "sqrt(x+1)"
+            e = e.replace(/√\s*\((.*?)\)/g, 'sqrt($1)');
+            e = e.replace(/√\s*([a-zA-Z0-9]+)/g, 'sqrt($1)');
+            
             return e;
         }
 
+        // --- SOLVE MATH ---
         solveBtn.addEventListener('click', () => {
-            if (selectedTextIndex === -1) return;
+            if (!selectedBlock) return;
             
-            const obj = textObjects[selectedTextIndex];
-            const originalExpr = obj.text;
-            const parsedExpr = parseToNerdamerFormat(originalExpr);
+            const originalExpr = selectedBlock.rawText;
+            const parsedExpr = preprocessMath(originalExpr);
             
             solveBtn.innerText = "⏳...";
             
             try {
-                let result = "";
+                let solutionTeX = "";
 
                 if (parsedExpr.includes('=')) {
                     // Equation Solver
@@ -534,27 +573,29 @@
                     
                     if (variables.length > 0) {
                         const sol = nerdamer.solve(equation, variables[0]);
-                        result = `${variables[0]} = ${sol.toString()}`;
+                        // sol.toTeX() formats the answer array beautifully
+                        solutionTeX = `${variables[0]} = ${sol.toTeX()}`;
                     } else {
-                        result = nerdamer(parsedExpr).evaluate().text();
+                        // Just an evaluation equality check
+                        solutionTeX = nerdamer(parsedExpr).evaluate().toTeX();
                     }
                 } else {
-                    // Evaluator (Integrals, Arithmetic, Calculus)
-                    result = nerdamer(parsedExpr).evaluate().text();
+                    // Standard Evaluator / Calculus
+                    solutionTeX = nerdamer(parsedExpr).evaluate().toTeX();
                 }
 
-                // Update text block visually
-                textObjects[selectedTextIndex].text = `${originalExpr} ➔ ${result}`;
+                // Store and render the solution
+                selectedBlock.solution = solutionTeX;
+                updateBlockVisuals(selectedBlock);
                 statusText.innerText = "Math solved.";
+                
             } catch (err) {
-                console.error(err);
+                console.error("Math Engine Error:", err);
                 statusText.innerText = "Invalid expression.";
-                alert(`Math Engine couldn't parse the equation. Make sure handwriting is clear.\n\nRaw read: ${originalExpr}\nParsed as: ${parsedExpr}`);
+                alert(`Could not solve. Ensure handwriting is clear.\n\nParsed formula was: ${parsedExpr}`);
             } finally {
                 solveBtn.innerText = "Solve Math";
                 hidePopup();
-                selectedTextIndex = -1;
-                redrawTextCanvas();
             }
         });
     </script>
