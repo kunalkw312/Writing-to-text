@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smartboard - Text & Math Handwriting</title>
     
-    <!-- Nerdamer for Math Parsing & Solving (Background Only) -->
+    <!-- KaTeX for Beautiful Math Solution Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+    <!-- Nerdamer for Math Parsing & Solving -->
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/nerdamer.core.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Algebra.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Calculus.js"></script>
@@ -97,10 +101,13 @@
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             z-index: 1;
-            pointer-events: none; 
+            pointer-events: none;
         }
 
-        /* The actual recognized blocks - exactly as written */
+        /* 
+           white-space: pre-wrap forces the browser to render EXACTLY 
+           the spaces and newlines that Google's OCR detected. 
+        */
         .recognized-block {
             position: absolute;
             padding: 4px 8px;
@@ -114,22 +121,18 @@
             user-select: none;
             transform-origin: top left;
             transition: all 0.2s ease;
-            white-space: pre-wrap; /* Crucial: Preserves exact spaces and breaks */
+            white-space: pre-wrap; /* Crucial for custom formatting/newlines */
+            word-wrap: break-word;
         }
-        
         .recognized-block.math-block {
             color: #6d28d9;
-            font-family: 'Cambria Math', 'Times New Roman', serif; /* Nice math font without altering layout */
-            font-style: italic;
         }
-        
         .recognized-block.selected {
             border-color: #007bff;
             background-color: rgba(0, 123, 255, 0.08);
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
 
-        /* Popup UI */
         #actionPopup {
             position: absolute;
             display: none;
@@ -206,7 +209,7 @@
         const solveBtn = document.getElementById('solveBtn');
         const writeLangSelect = document.getElementById('writeLang');
 
-        let currentMode = 'text'; 
+        let currentMode = 'text';
         let blocks = []; 
         let selectedBlock = null;
         
@@ -344,9 +347,7 @@
             bounds = null;
 
             let reqLang = writeLangSelect.value;
-            if (isMathBlock) {
-                 reqLang = "en"; 
-            }
+            if (isMathBlock) reqLang = "en"; 
 
             const payload = {
                 app_version: 0.4, api_level: "537.36", device: "Mozilla/5.0",
@@ -370,7 +371,7 @@
                     createDOMBlock(text, targetBounds, isMathBlock);
                     statusText.innerText = "Converted successfully.";
                 } else {
-                    statusText.innerText = "Couldn't read handwriting. Try writing clearer.";
+                    statusText.innerText = "Couldn't read handwriting.";
                 }
             } catch (err) {
                 statusText.innerText = "Network error.";
@@ -411,16 +412,40 @@
             blocks.push(blockData);
         }
 
-        // Renders the exact text, unaltered, maintaining native spaces
         function updateBlockVisuals(block) {
-            let displayString = block.rawText;
+            // Clear existing content
+            block.el.innerHTML = '';
             
-            // Append the solved answer if it exists
-            if (block.solution) {
-                displayString = `${displayString} ➔ ${block.solution}`;
+            // 1. Display raw user text EXACTLY as returned (spaces, new lines preserved)
+            const inputSpan = document.createElement('span');
+            inputSpan.innerText = block.rawText; 
+            
+            if (block.isMath) {
+                inputSpan.style.fontFamily = "'Cambria Math', 'Times New Roman', serif";
+                inputSpan.style.fontStyle = "italic";
+            } else {
+                inputSpan.style.fontFamily = "'Segoe UI', sans-serif";
             }
             
-            block.el.innerText = displayString;
+            block.el.appendChild(inputSpan);
+
+            // 2. Append formatted math solution ONLY if solved
+            if (block.solution) {
+                const arrowSpan = document.createElement('span');
+                arrowSpan.innerHTML = ' &nbsp; ➔ &nbsp; ';
+                arrowSpan.style.fontStyle = 'normal';
+                
+                const solutionSpan = document.createElement('span');
+                try {
+                    // KaTeX is strictly used to display the final answer gracefully
+                    katex.render(block.solution, solutionSpan, { throwOnError: false });
+                } catch(e) {
+                    solutionSpan.innerText = block.solution;
+                }
+                
+                block.el.appendChild(arrowSpan);
+                block.el.appendChild(solutionSpan);
+            }
         }
 
         function showPopup(block) {
@@ -468,9 +493,12 @@
             }
         });
 
-        // Background formatting for the Engine only (does not change visuals)
+        // PREPARE STRING FOR NERDAMER SOLVER
         function formatSolverString(expr) {
             let e = expr.trim();
+            
+            // Strip out newlines for the math engine to prevent crashes
+            e = e.replace(/\n/g, ' '); 
             
             e = e.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
             e = e.replace(/(?<=\d)\s+[xX]\s+(?=\d)/g, '*'); 
@@ -503,7 +531,7 @@
             solveBtn.innerText = "⏳...";
             
             try {
-                let solutionText = "";
+                let solutionTeX = "";
 
                 if (solverExpr.includes('=')) {
                     const parts = solverExpr.split('=');
@@ -512,15 +540,15 @@
                     
                     if (variables.length > 0) {
                         const sol = nerdamer.solve(equation, variables[0]);
-                        solutionText = `${variables[0]} = ${sol.toString()}`;
+                        solutionTeX = `${variables[0]} = ${sol.toTeX()}`;
                     } else {
-                        solutionText = nerdamer(solverExpr).evaluate().text();
+                        solutionTeX = nerdamer(solverExpr).evaluate().toTeX();
                     }
                 } else {
-                    solutionText = nerdamer(solverExpr).evaluate().text();
+                    solutionTeX = nerdamer(solverExpr).evaluate().toTeX();
                 }
 
-                selectedBlock.solution = solutionText;
+                selectedBlock.solution = solutionTeX;
                 updateBlockVisuals(selectedBlock);
                 statusText.innerText = "Math solved.";
                 
