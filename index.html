@@ -158,7 +158,7 @@
         <div class="toolbar-group" id="writeControls">
             <label for="writeLang" style="font-weight: bold; color: #333; font-size: 14px;">Text Lang:</label>
             <select id="writeLang">
-                <option value="en">English</option>
+                <option value="en">English (Use for Math)</option>
                 <option value="mr">Marathi (मराठी)</option>
                 <option value="hi">Hindi (हिन्दी)</option>
                 <option value="es">Spanish (Español)</option>
@@ -354,8 +354,13 @@
             allStrokes = [];
             bounds = null;
 
-            // USE "math" AS LANGUAGE IF IN MATH MODE FOR PROPER SYMBOL RECOGNITION
-            const reqLang = isMathBlock ? "math" : writeLangSelect.value;
+            // FIX: Always use the selected standard language (e.g., 'en'). 
+            // The Google API doesn't accept "math" as a valid language code.
+            // English supports mathematical symbols perfectly well.
+            let reqLang = writeLangSelect.value;
+            if (isMathBlock) {
+                 reqLang = "en"; // Force English for Math to ensure math symbol support
+            }
 
             const payload = {
                 app_version: 0.4, api_level: "537.36", device: "Mozilla/5.0",
@@ -379,7 +384,7 @@
                     createDOMBlock(text, targetBounds, isMathBlock);
                     statusText.innerText = "Converted successfully.";
                 } else {
-                    statusText.innerText = "Couldn't read handwriting.";
+                    statusText.innerText = "Couldn't read handwriting. Try writing clearer.";
                 }
             } catch (err) {
                 statusText.innerText = "Network error.";
@@ -395,7 +400,7 @@
             
             // Adjust position & font size relative to bounding box
             const boxHeight = box.maxY - box.minY;
-            const fontSize = Math.max(22, Math.min(60, boxHeight * 0.85)); // Scale nicely
+            const fontSize = Math.max(22, Math.min(60, boxHeight * 0.85)); 
             div.style.left = `${Math.max(10, box.minX)}px`;
             div.style.top = `${Math.max(10, box.minY - 10)}px`;
             div.style.fontSize = `${fontSize}px`;
@@ -422,7 +427,7 @@
             blocks.push(blockData);
         }
 
-        // Formats raw text into KaTeX purely for EXACT display (does not alter formula order)
+        // Formats raw text into KaTeX purely for EXACT display
         function formatDisplayTeX(raw) {
             let tex = raw;
             // Handle × and ÷ visually
@@ -437,7 +442,7 @@
 
             // Handle Integrals & Roots visually exactly as placed
             tex = tex.replace(/∫/g, '\\int ');
-            tex = tex.replace(/√/g, '\\sqrt');
+            tex = tex.replace(/√/g, '\\sqrt ');
             tex = tex.replace(/π/g, '\\pi ');
 
             return tex;
